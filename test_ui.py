@@ -60,8 +60,14 @@ class RecentUiTests(unittest.TestCase):
 
 class LatestPopupTests(unittest.TestCase):
  def test_blank_click_closes_without_conversion(self):
+  from unittest.mock import patch
+  import types,sys
   popup=QuickPopup();chosen=[];popup.chosen.connect(chosen.append);popup.present(['a.pdf']);app.processEvents()
-  point=popup.mapToGlobal(__import__('PySide6.QtCore',fromlist=['QPoint']).QPoint(1,1));popup.clicked_at((point.x(),point.y()))
+  point=popup.mapToGlobal(__import__('PySide6.QtCore',fromlist=['QPoint']).QPoint(1,1))
+  # Qt's offscreen backend does not provide a real Win32 HWND. Supply the
+  # native coordinate boundary while exercising the actual blank-hit logic.
+  native=types.SimpleNamespace(ScreenToClient=lambda hwnd,p:(1,1),GetClientRect=lambda hwnd:(0,0,popup.width(),popup.height()))
+  with patch.dict(sys.modules,{'win32gui':native}): popup.clicked_at((point.x(),point.y()))
   self.assertFalse(popup.isVisible());self.assertEqual(chosen,[])
  def test_button_click_still_converts(self):
   from PySide6.QtTest import QTest

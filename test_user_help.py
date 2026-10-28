@@ -26,9 +26,9 @@ class HelpTests(unittest.TestCase):
   self.assertGreater(dialog.text.verticalScrollBar().maximum(),0);dialog.reject()
  def test_developer_readme_retained_and_manual_bundled_in_both_builds(self):
   root=Path(__file__).parent
-  self.assertIn('## 빌드·배포',(root/'DEVELOPER-README.md').read_text())
-  self.assertNotIn('py -3.12',(root/'README.md').read_text())
-  for name in ['build_release.ps1','build_exe.bat']:self.assertIn('USER-GUIDE.md;.',(root/name).read_text())
+  self.assertIn('## 빌드·배포',(root/'DEVELOPER-README.md').read_text(encoding='utf-8'))
+  self.assertNotIn('py -3.12',(root/'README.md').read_text(encoding='utf-8'))
+  for name in ['build_release.ps1','build_exe.bat']:self.assertIn('USER-GUIDE.md;.',(root/name).read_text(encoding='utf-8'))
 
 class UserMessageTests(unittest.TestCase):
  def test_user_messages_hide_technical_details_and_offer_a_next_step(self):
@@ -50,7 +50,7 @@ class UserMessageTests(unittest.TestCase):
    with tempfile.TemporaryDirectory() as folder,patch.dict(os.environ,LOCALAPPDATA=folder):
     message=friendly_error(RuntimeError('internal stack: unique-test-marker'))
     self.assertNotIn('unique-test-marker',message)
-    self.assertIn('unique-test-marker',(Path(folder)/'Bakuri'/'errors.log').read_text())
+    self.assertIn('unique-test-marker',(Path(folder)/'Bakuri'/'errors.log').read_text(encoding='utf-8'))
     self.assertEqual(friendly_error(message),message)
     for h in logger.handlers:h.close()
     logger.handlers=[]

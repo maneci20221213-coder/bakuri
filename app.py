@@ -1,4 +1,4 @@
-import sys, os, threading, json, time
+import sys, os, threading, json
 from pathlib import Path
 from user_messages import friendly_error
 
@@ -13,13 +13,13 @@ if __name__=='__main__':
     from velopack_bootstrap import bootstrap
     bootstrap()
 
-from PySide6.QtCore import Qt, Signal, QObject, QTimer, QSize, QSettings, QEvent, QUrl, QPoint
-from PySide6.QtGui import QIcon, QAction, QCursor, QDesktopServices, QColor, QBrush, QShortcut
+from PySide6.QtCore import Qt, Signal, QObject, QTimer, QSettings, QEvent, QUrl, QPoint
+from PySide6.QtGui import QCursor, QDesktopServices, QColor, QBrush, QShortcut
 from PySide6.QtWidgets import *
 from engine import convert, SUPPORTED, SPREADSHEETS, can_convert, IMAGES
-from file_list import Files,natural_key
+from file_list import Files
 from settings_ui import SettingsDialog
-from theme import ACCENT, icon, stylesheet
+from theme import icon, stylesheet
 from version import VERSION
 from jobs import JobControl,Cancelled
 from compression import compress

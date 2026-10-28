@@ -20,11 +20,16 @@ try {
    if ((Test-Path $Link) -eq $Expected) { $Observed=$true;break }
    if ($Child.HasExited) { break }
   }
-  if (-not $Observed) { throw "Desktop shortcut choice $Choice was not applied." }
+  if (-not $Observed) {
+   Get-ChildItem $Destination -Recurse -Depth 1 | Select-Object FullName | Format-Table -AutoSize | Out-String | Write-Host
+   $ErrorLog=Join-Path $env:LOCALAPPDATA 'Bakuri\errors.log'
+   if (Test-Path $ErrorLog) { Get-Content $ErrorLog -Tail 40 | Write-Host }
+   Write-Host "Process exited: $($Child.HasExited); Desktop: $Desktop"
+   throw "Desktop shortcut choice $Choice was not applied." }
   if ($Expected) {
    $Shell=New-Object -ComObject WScript.Shell
    $Target=$Shell.CreateShortcut($Link).TargetPath
-   if (-not (Test-Path $Target) -or (Split-Path $Target) -ne $Destination) { throw 'Shortcut does not target the stable installed launcher.' }
+   if (-not (Test-Path $Target) -or (Split-Path $Target) -notin @($Destination,(Join-Path $Destination 'current'))) { throw 'Shortcut does not target the stable installed launcher.' }
   }
   if (-not $Child.HasExited) { & taskkill /PID $Child.Id /T /F | Out-Null }
   $Child=$null

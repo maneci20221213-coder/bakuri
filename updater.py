@@ -4,7 +4,6 @@ from pathlib import Path
 from urllib.parse import urlparse
 from PySide6.QtCore import QObject,Signal
 from PySide6.QtWidgets import QDialog,QVBoxLayout,QLabel,QCheckBox,QDialogButtonBox,QMessageBox
-from version import VERSION
 from user_messages import friendly_error
 def config_path():
     import sys

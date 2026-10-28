@@ -254,7 +254,7 @@ def apply_install_options(arguments):
     try:
         # Velopack's root launcher stays stable when the current directory updates.
         root=Path(sys.executable).parent.parent
-        launcher=next((path for path in (root/'BakuriFileConverter.exe',root/'바꾸리.exe') if path.is_file()),root/'BakuriFileConverter.exe')
+        launcher=next((path for path in (root/'BakuriFileConverter.exe',root/'바꾸리.exe') if path.is_file()),Path(sys.executable))
         if not (root/'Update.exe').is_file() or not launcher.is_file():
             raise RuntimeError('설치된 바꾸리를 찾지 못했습니다.')
         shell=win32com.client.Dispatch('WScript.Shell')

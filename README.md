@@ -4,7 +4,7 @@
 
 [**Windows용 바꾸리 다운로드**](https://github.com/maneci20221213-coder/bakuri/releases/latest/download/BakuriSetup.exe)
 
-첫 정식 Release를 게시하기 전에는 위 다운로드 링크가 작동하지 않습니다.
+Windows x64용 설치 파일입니다.
 
 ## 사용
 1. 기존 바꾸리가 실행 중이면 트레이에서 완전히 종료합니다.

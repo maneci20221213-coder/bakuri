@@ -48,15 +48,23 @@ class RefactorTests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);(root/'current').mkdir();desktop=root/'Desktop';desktop.mkdir()
    for p in (root/'Update.exe',root/'BakuriFileConverter.exe'):p.touch()
-   link=desktop/'바꾸리.lnk'
-   shortcut=types.SimpleNamespace(TargetPath=str(root/'BakuriFileConverter.exe'),Save=lambda:link.touch())
-   shell=types.SimpleNamespace(SpecialFolders=lambda _:str(desktop),CreateShortcut=lambda _:shortcut)
-   com=types.SimpleNamespace(CoInitialize=lambda:None,CoUninitialize=lambda:None)
-   client=types.SimpleNamespace(Dispatch=lambda _:shell)
-   with patch.dict(sys.modules,{'pythoncom':com,'win32com':types.SimpleNamespace(client=client),'win32com.client':client}),patch.object(sys,'frozen',True,create=True),patch.object(sys,'executable',str(root/'current'/'BakuriFileConverter.exe')):
+   link=desktop/'바꾸리.lnk';target=[str(root/'BakuriFileConverter.exe')]
+   persist=types.SimpleNamespace(Save=lambda path,mode:Path(path).touch(),Load=lambda path:None)
+   shortcut=types.SimpleNamespace(
+    SetPath=lambda path:target.__setitem__(0,path),SetWorkingDirectory=lambda path:None,
+    SetDescription=lambda text:None,SetIconLocation=lambda path,index:None,
+    GetPath=lambda flags:(target[0],None),QueryInterface=lambda iid:persist)
+   shell=types.SimpleNamespace(SHGetSpecialFolderPath=lambda *args:str(desktop),
+                              CLSID_ShellLink='link',IID_IShellLink='shell-link')
+   shellcon=types.SimpleNamespace(CSIDL_DESKTOPDIRECTORY=16,SLGP_RAWPATH=4)
+   com=types.SimpleNamespace(CoInitialize=lambda:None,CoUninitialize=lambda:None,
+                            CoCreateInstance=lambda *args:shortcut,CLSCTX_INPROC_SERVER=1,
+                            IID_IPersistFile='persist-file')
+   package=types.ModuleType('win32com.shell');package.shell=shell;package.shellcon=shellcon
+   with patch.dict(sys.modules,{'pythoncom':com,'win32com.shell':package}),patch.object(sys,'frozen',True,create=True),patch.object(sys,'executable',str(root/'current'/'BakuriFileConverter.exe')):
     windows.apply_install_options([]);self.assertFalse(link.exists())
     windows.apply_install_options(['--desktop-shortcut=1']);self.assertTrue(link.exists())
-    self.assertEqual(shortcut.TargetPath,str(root/'BakuriFileConverter.exe'))
+    self.assertEqual(target[0],str(root/'BakuriFileConverter.exe'))
     windows.apply_install_options(['--desktop-shortcut=0']);self.assertFalse(link.exists())
-    link.touch();shortcut.TargetPath=str(root/'another-app.exe')
+    link.touch();target[0]=str(root/'another-app.exe')
     windows.apply_install_options(['--desktop-shortcut=0']);self.assertTrue(link.exists())

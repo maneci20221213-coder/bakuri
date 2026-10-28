@@ -249,23 +249,31 @@ def apply_install_options(arguments):
     choice=next((arg.rsplit('=',1)[1] for arg in arguments
                  if arg in ('--desktop-shortcut=0','--desktop-shortcut=1')),None)
     if choice is None or not getattr(sys,'frozen',False):return
-    import pythoncom,win32com.client
+    import pythoncom
+    from win32com.shell import shell,shellcon
     pythoncom.CoInitialize()
     try:
-        # Velopack's root launcher stays stable when the current directory updates.
+        # Prefer Velopack's stable root launcher; current also survives updates.
         root=Path(sys.executable).parent.parent
         launcher=next((path for path in (root/'BakuriFileConverter.exe',root/'바꾸리.exe') if path.is_file()),Path(sys.executable))
         if not (root/'Update.exe').is_file() or not launcher.is_file():
             raise RuntimeError('설치된 바꾸리를 찾지 못했습니다.')
-        shell=win32com.client.Dispatch('WScript.Shell')
-        link=Path(shell.SpecialFolders('Desktop'))/'바꾸리.lnk'
+        desktop=Path(shell.SHGetSpecialFolderPath(0,shellcon.CSIDL_DESKTOPDIRECTORY,False))
+        link=desktop/'바꾸리.lnk'
+        # Use the typed shell interface: WScript's late-bound shortcut object
+        # cannot reliably expose writable properties in the frozen application.
+        shortcut=pythoncom.CoCreateInstance(shell.CLSID_ShellLink,None,
+                                           pythoncom.CLSCTX_INPROC_SERVER,shell.IID_IShellLink)
+        persist=shortcut.QueryInterface(pythoncom.IID_IPersistFile)
         if choice=='1':
-            shortcut=shell.CreateShortcut(str(link))
-            shortcut.TargetPath=str(launcher);shortcut.WorkingDirectory=str(root)
-            shortcut.Description='바꾸리 파일 변환기';shortcut.Save()
+            shortcut.SetPath(str(launcher))
+            shortcut.SetWorkingDirectory(str(root))
+            shortcut.SetDescription('바꾸리 파일 변환기')
+            shortcut.SetIconLocation(str(launcher),0)
+            persist.Save(str(link),0)
         elif link.exists():
-            shortcut=shell.CreateShortcut(str(link))
-            target=Path(shortcut.TargetPath)
+            persist.Load(str(link))
+            target=Path(shortcut.GetPath(shellcon.SLGP_RAWPATH)[0])
             if target.resolve() in {launcher.resolve(),Path(sys.executable).resolve()}:
                 link.unlink()
     except Exception as exc:

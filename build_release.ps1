@@ -28,8 +28,27 @@ Get-ChildItem '.release-venv\Lib\site-packages' -Directory -Filter '*.dist-info'
   Copy-Item $_.FullName $Target -Force
  }
 }
+# Verify the frozen executable reaches its IPC server, after Qt and Window
+# initialization. Background mode avoids network checks; disable shell hooks.
+$PreviousIntegration=$env:BAKURI_DISABLE_SHELL_INTEGRATION
+$env:BAKURI_DISABLE_SHELL_INTEGRATION='1'
+$Smoke=Start-Process (Join-Path $PackDir 'BakuriFileConverter.exe') -ArgumentList '--background' -PassThru
+try {
+ $Ready=$false
+ for ($Attempt=0; $Attempt -lt 15; $Attempt++) {
+  & $Python -c "from PySide6.QtCore import QCoreApplication; from PySide6.QtNetwork import QLocalSocket; app=QCoreApplication([]); s=QLocalSocket(); s.connectToServer('BakuriPythonTrial'); raise SystemExit(0 if s.waitForConnected(1000) else 1)"
+  if ($LASTEXITCODE -eq 0) { $Ready=$true; break }
+  if ($Smoke.HasExited) { break }
+  Start-Sleep -Milliseconds 500
+ }
+ if (-not $Ready) { throw 'Frozen executable did not reach the application IPC server.' }
+ Write-Host 'Frozen executable startup smoke check passed.'
+} finally {
+ if (-not $Smoke.HasExited) { & taskkill /PID $Smoke.Id /T /F | Out-Null }
+ $env:BAKURI_DISABLE_SHELL_INTEGRATION=$PreviousIntegration
+}
 if (-not (Test-Path '.vpk-tools\vpk.exe')) { RunChecked { dotnet tool install vpk --version 1.2.161 --tool-path .vpk-tools } }
-RunChecked { & '.\.vpk-tools\vpk.exe' pack --packId Bakuri.FileConverter --packVersion $Version --packDir $PackDir --mainExe BakuriFileConverter.exe --channel stable --packTitle '바꾸리' --icon assets/app.ico --releaseNotes RELEASE-NOTES.md --outputDir '.\Releases' }
+RunChecked { & '.\.vpk-tools\vpk.exe' pack --packId Bakuri.FileConverter --packVersion $Version --packDir $PackDir --mainExe BakuriFileConverter.exe --runtime win-x64 --channel stable --packTitle '바꾸리' --icon assets/app.ico --releaseNotes RELEASE-NOTES.md --outputDir '.\Releases' }
 $Setups=@(Get-ChildItem 'Releases' -File -Filter '*Setup.exe')
 if ($Setups.Count -ne 1) { throw 'Expected exactly one generated Setup.exe.' }
 Copy-Item $Setups[0].FullName 'Releases\BakuriSetup.exe' -Force

@@ -1,5 +1,6 @@
 """Explorer selection and keyboard events run outside the Qt UI thread."""
 import sys, threading, ctypes, subprocess, winreg, queue, time, logging, os
+from user_messages import friendly_error
 from pathlib import Path
 RUN=r'Software\Microsoft\Windows\CurrentVersion\Run'
 NAME='Bakuri'
@@ -126,7 +127,7 @@ class SelectionWatcher(threading.Thread):
                 except queue.Empty:
                     self.log.warning('Explorer selection timed out');self.error('탐색기 파일 조회가 지연됐습니다. 다시 시도해 주세요.');continue
                 if error:
-                    self.log.warning('Explorer selection failed: %s',error);self.error('선택 파일 조회 실패: '+error);continue
+                    self.log.warning('Explorer selection failed: %s',error);self.error(friendly_error(error,'selection'));continue
                 if win32gui.GetForegroundWindow()==hwnd and active_tab(hwnd)==tab: self.callback((paths,hwnd,tab))
             except Exception:
                 self.log.exception('Hotkey supervisor recovered');self.restart.set();time.sleep(.25)

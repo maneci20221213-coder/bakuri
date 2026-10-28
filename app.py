@@ -1,28 +1,27 @@
+import sys, os, threading, re, json, time
+from pathlib import Path
+from user_messages import friendly_error
+
+def startup_error(kind,value,tb):
+    running='QApplication' in globals() and QApplication.instance() is not None
+    message=friendly_error(value,'conversion' if running else 'startup')
+    if sys.platform=='win32':
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(None,message,'바꾸리 안내',16)
+sys.excepthook=startup_error
 if __name__=='__main__':
     from velopack_bootstrap import bootstrap
     bootstrap()
 
-import sys, os, threading, re, json, time
-from pathlib import Path
-
-def startup_error(kind,value,tb):
-    import traceback
-    text=''.join(traceback.format_exception(kind,value,tb))
-    folder=Path(os.environ.get('LOCALAPPDATA',str(Path.home())))/'Bakuri'; folder.mkdir(parents=True,exist_ok=True)
-    log=folder/'error.log'; log.write_text(text,encoding='utf-8')
-    if sys.platform=='win32':
-        import ctypes
-        ctypes.windll.user32.MessageBoxW(None,'실행 오류가 발생했습니다.\n'+str(log)+'\n\n'+str(value),'바꾸리',16)
-sys.excepthook=startup_error
-
 from PySide6.QtCore import Qt, Signal, QObject, QTimer, QSize, QSettings, QEvent, QUrl, QPoint
-from PySide6.QtGui import QIcon, QAction, QCursor, QDesktopServices, QColor, QBrush
+from PySide6.QtGui import QIcon, QAction, QCursor, QDesktopServices, QColor, QBrush, QShortcut
 from PySide6.QtWidgets import *
 from engine import convert, SUPPORTED, SPREADSHEETS, can_convert, IMAGES
 from theme import ACCENT, icon, stylesheet
 from version import VERSION
 from jobs import JobControl,Cancelled
 from compression import compress
+from help_ui import HelpDialog
 from work_ui import CompressionDialog,ProgressPopup,CompressionResults,add_profiles,read_options
 
 class OutputFormatDelegate(QStyledItemDelegate):
@@ -69,7 +68,7 @@ class SettingsDialog(QDialog):
             self.window.settings.setValue('explorer',True);self.window.settings.sync()
             self.explorer.setChecked(True)
             QMessageBox.information(self,'우클릭 메뉴 등록','현재 사용자 계정에 등록했습니다. 탐색기에서 파일을 다시 우클릭해 주세요.')
-        except Exception as exc:QMessageBox.warning(self,'우클릭 메뉴 등록 실패',str(exc))
+        except Exception as exc:QMessageBox.warning(self,'우클릭 메뉴를 추가하지 못했어요',friendly_error(exc,'menu'))
     def save(self):
         try:
             if sys.platform=='win32':
@@ -78,7 +77,7 @@ class SettingsDialog(QDialog):
             s=self.window.settings; s.setValue('hotkey_enabled',self.enabled.isChecked()); s.setValue('hotkey',self.key.currentText()); s.setValue('notify',self.notify.isChecked()); s.setValue('explorer',self.explorer.isChecked()); s.setValue('dpi',int(self.dpi.currentText()));s.setValue('image_mode',self.image_mode.currentData());s.setValue('compress_profile',self.compress_profile.currentData());s.setValue('compress_protect',self.compress_protect.isChecked());s.setValue('compress_strip',self.compress_strip.isChecked());s.setValue('compress_direct',self.compress_direct.isChecked()); s.sync();
             if hasattr(self.window,'watcher'): self.window.watcher.update_settings(s)
             self.accept()
-        except Exception as e: QMessageBox.warning(self,'설정 저장 실패',str(e))
+        except Exception as e: QMessageBox.warning(self,'설정을 저장하지 못했어요',friendly_error(e,'settings'))
 
 class Files(QTreeWidget):
     changed=Signal()
@@ -280,6 +279,8 @@ class Window(QWidget):
         remove=QPushButton('선택 제거');remove.setIcon(icon('delete'));remove.setToolTip('체크한 파일을 목록에서 제거합니다. 원본은 보존됩니다.');remove.clicked.connect(self.remove);row.addWidget(remove)
         row.addStretch();self.count_label=QLabel('0 / 0개 선택');self.count_label.setObjectName('selectionCount');row.addWidget(self.count_label)
         settings_button=QPushButton();settings_button.setObjectName('settings');settings_button.setIcon(icon('gear'));settings_button.setAccessibleName('설정');settings_button.setToolTip('설정');settings_button.clicked.connect(self.open_settings);row.addWidget(settings_button)
+        self.help_button=QPushButton('?');self.help_button.setObjectName('help');self.help_button.setAccessibleName('사용 설명');self.help_button.setToolTip('사용 설명 (F1)');self.help_button.clicked.connect(self.open_help);row.addWidget(self.help_button)
+        self.help_shortcut=QShortcut('F1',self);self.help_shortcut.activated.connect(self.open_help)
         layout.addWidget(toolbar)
         self.files=Files();self.files.changed.connect(self.refresh_count);layout.addWidget(self.files,1)
         options=QFrame();options.setObjectName('options');row=QHBoxLayout(options);row.setContentsMargins(18,14,18,14);row.setSpacing(12)
@@ -297,7 +298,7 @@ class Window(QWidget):
         self.run=QPushButton('변환 시작  →');self.run.setObjectName('convert');self.run.setMinimumWidth(184);self.run.clicked.connect(self.start);row.addWidget(self.run);layout.addWidget(footer)
         app_icon=icon('app');self.setWindowIcon(app_icon)
         self.tray=QSystemTrayIcon(icon('tray'),self); menu=QMenu()
-        menu.addAction('열기',lambda:self.open_main('direct')); menu.addAction('설정',self.open_settings); menu.addAction('단축키 다시 연결',self.reconnect_hotkey); menu.addSeparator(); menu.addAction('완전 종료',self.quit); self.tray.setContextMenu(menu)
+        menu.addAction('열기',lambda:self.open_main('direct')); menu.addAction('설정',self.open_settings); menu.addAction('사용 설명',self.open_help); menu.addAction('단축키 다시 연결',self.reconnect_hotkey); menu.addSeparator(); menu.addAction('완전 종료',self.quit); self.tray.setContextMenu(menu)
         self.tray.messageClicked.connect(lambda:self.open_folders(self.notification_folders))
         self.tray.activated.connect(lambda reason:self.open_main('direct') if reason==QSystemTrayIcon.Trigger else None); self.tray.show()
         from updater import UpdateController
@@ -311,7 +312,7 @@ class Window(QWidget):
                 if startup_enabled():set_startup(True)
                 if migrate_menu(self.settings.value('explorer',True,type=bool)):
                     self.settings.setValue('explorer',True);self.settings.sync()
-            except Exception as exc:self.status.setText('탐색기 메뉴 등록 실패: '+str(exc))
+            except Exception as exc:self.status.setText(friendly_error(exc,'menu'))
             self.watcher=SelectionWatcher(self.bus.selected.emit,self.bus.message.emit,self.settings,self.bus.dismiss.emit,self.bus.popup_key.emit)
             self.popup.visibility.connect(self.popup_visibility);self.watcher.start()
             self.mouse_watcher=MouseWatcher(self.bus.clicked.emit); self.mouse_watcher.start()
@@ -345,6 +346,8 @@ class Window(QWidget):
         if hasattr(self,'updater'):self.updater.request(reason)
     def reconnect_hotkey(self):
         if hasattr(self,'watcher'): self.watcher.request_restart(); self.status.setText('단축키를 다시 연결합니다.')
+    def open_help(self):
+        HelpDialog(self).exec()
     def open_settings(self):
         if self.busy:return
         SettingsDialog(self).exec();self.compression_profile.setCurrentIndex(self.compression_profile.findData(read_options(self.settings)['profile']))
@@ -390,7 +393,7 @@ class Window(QWidget):
     def start_conversion(self,paths,fmt,merge,anchor=None):
         if self.busy:return
         if any(not can_convert(p,fmt) for p in paths):
-            QMessageBox.information(self,'출력 형식 확인','HWPX: HWP·ODT·Word·이미지·PDF / DOCX: 한글 / PPTX: 이미지·PDF / XLSX: 스프레드시트 입력을 선택해 주세요.');return
+            QMessageBox.information(self,'출력 형식 확인','선택한 파일에는 이 출력 형식을 사용할 수 없습니다. 파일의 체크 표시를 확인하고, 선택 가능한 다른 형식을 골라 주세요. 자세한 내용은 ? 버튼의 사용 설명에서 확인할 수 있습니다.');return
         dpi=self.settings.value('dpi',150,type=int);image_mode=self.settings.value('image_mode','background')
         self.begin_job(lambda control:convert(paths,fmt,merge,dpi=dpi,image_mode=image_mode,control=control),'convert',anchor)
     def start_compression(self,paths,anchor=None):
@@ -413,7 +416,7 @@ class Window(QWidget):
             outcome='done';error=''
             try:operation(control)
             except Cancelled:outcome='cancelled'
-            except Exception as exc:outcome='failed';error=str(exc)
+            except Exception as exc:outcome='failed';error=friendly_error(exc,'compression' if kind=='compress' else 'conversion')
             self.bus.done.emit(dict(paths=list(control.outputs),rows=list(control.rows),outcome=outcome,error=error,kind=kind))
         self.worker=threading.Thread(target=work,daemon=True);self.worker.start()
     def update_progress(self,percent,text):
@@ -426,7 +429,7 @@ class Window(QWidget):
     def reset(self):
         self.busy=False;self.control=None;self.run.setEnabled(True);self.files.setEnabled(True);self.toolbar.setEnabled(True);self.fmt.setEnabled(True);self.compression_profile.setEnabled(True);self.individual.setEnabled(True);self.output_changed(self.fmt.currentText());self.progress_popup.hide()
     def failed(self,text):
-        self.reset();self.status.setText('실패: '+text);self.show();QMessageBox.warning(self,'변환 실패',text+'\n일부 개별 파일은 이미 저장되었을 수 있습니다.')
+        self.reset();self.status.setText('변환을 완료하지 못했습니다.');self.show();QMessageBox.warning(self,'변환을 완료하지 못했어요',friendly_error(text)+'\n\n원본과 이미 저장된 결과는 그대로 남아 있습니다.')
     def finished(self,result):
         if isinstance(result,list):result=dict(paths=result,rows=[],outcome='done',error='',kind='convert')
         paths=result['paths'];outcome=result['outcome'];was_popup=self.progress_popup.isVisible();self.reset();self.compression_rows=result.get('rows',[])
@@ -443,7 +446,7 @@ class Window(QWidget):
         if self.compression_rows:links.append('<a style="color:#2E83F2;text-decoration:none" href="details">상세 결과</a>')
         self.status.setText(summary+(' · '+' · '.join(links) if links else ''))
         if self.settings.value('notify',True,type=bool):self.tray.showMessage('바꾸리 파일 변환기',summary+(' · 클릭하면 저장 폴더를 엽니다.' if paths else ''))
-        if outcome=='failed':self.show();QMessageBox.warning(self,'작업 실패',result.get('error','')+'\n이미 저장된 결과와 원본은 보존됩니다.')
+        if outcome=='failed':self.show();QMessageBox.warning(self,'작업을 완료하지 못했어요',friendly_error(result.get('error',''))+'\n\n원본과 이미 저장된 결과는 그대로 남아 있습니다.')
     def status_link(self,link):
         if link=='details':CompressionResults(self.compression_rows,self).exec()
         else:self.open_folders(self.output_folders)

@@ -38,7 +38,8 @@ def stylesheet():
     QPushButton#convert:hover {{ background:#2475DF; border-color:#2475DF; }}
     QPushButton#convert:pressed {{ background:#1F68CA; }}
     QPushButton#convert:disabled {{ background:#ABCDF8; border-color:#ABCDF8; color:#F8FBFF; }}
-    QPushButton#settings {{ min-width:20px; padding:9px; }}
+    QPushButton#settings, QPushButton#help {{ min-width:20px; padding:9px; }}
+    QPushButton#help {{ font-weight:700; font-size:18px; color:{ACCENT}; }}
     QPushButton#separate, QPushButton#merge {{ background:#FFFFFF; border:1px solid #DCE3EE; padding:9px 15px; border-radius:0; min-width:92px; }}
     QPushButton#separate {{ border-top-left-radius:7px; border-bottom-left-radius:7px; }}
     QPushButton#merge {{ border-top-right-radius:7px; border-bottom-right-radius:7px; }}

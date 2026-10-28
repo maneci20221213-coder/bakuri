@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 from PySide6.QtCore import QObject,Signal
 from PySide6.QtWidgets import QDialog,QVBoxLayout,QLabel,QCheckBox,QDialogButtonBox,QMessageBox
 from version import VERSION
+from user_messages import friendly_error
 def config_path():
     import sys
     return Path(sys.executable).with_name('update-config.json') if getattr(sys,'frozen',False) else Path(__file__).with_name('update-config.json')
@@ -58,7 +59,7 @@ class UpdateController(QObject):
                 if factory is None:factory=make_update_manager
                 manager=factory(url);info=manager.check_for_updates()
                 self.checked.emit((manager,info) if info else None)
-            except Exception as exc:self.failed.emit('업데이트 확인 실패: '+str(exc))
+            except Exception as exc:self.failed.emit(friendly_error(exc,'update_check'))
         self.worker=threading.Thread(target=work,daemon=True);self.worker.start()
     def on_checked(self,result):
         self.checking=False
@@ -74,7 +75,7 @@ class UpdateController(QObject):
         self.installing=True;self.window.setEnabled(False);self.window.status.setText('업데이트 다운로드 중 · 완료 후 다시 실행합니다.')
         def download():
             try:manager.download_updates(info);self.downloaded.emit((manager,info))
-            except Exception as exc:self.failed.emit('업데이트 다운로드 실패: '+str(exc))
+            except Exception as exc:self.failed.emit(friendly_error(exc,'update_download'))
         self.worker=threading.Thread(target=download,daemon=True);self.worker.start()
     def on_downloaded(self,result):
         manager,info=result
@@ -83,8 +84,9 @@ class UpdateController(QObject):
             manager.apply_updates_and_restart(info)
             from PySide6.QtWidgets import QApplication
             QApplication.quit()
-        except Exception as exc:self.on_failed('업데이트 설치 실패: '+str(exc))
+        except Exception as exc:self.on_failed(friendly_error(exc,'update_install'))
     def on_failed(self,text):
         was_installing=self.installing;self.checking=False;self.installing=False;self.window.setEnabled(True)
+        text=friendly_error(text,'update_install' if was_installing else 'update_check')
         self.window.status.setText(text)
-        if was_installing:QMessageBox.warning(self.window,'업데이트 실패',text+'\n현재 버전은 계속 사용할 수 있습니다.')
+        if was_installing:QMessageBox.warning(self.window,'업데이트를 완료하지 못했어요',text)

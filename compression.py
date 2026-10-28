@@ -1,4 +1,5 @@
 """Conservative offline compression. No page rasterization or external tools."""
+from user_messages import friendly_error
 from pathlib import Path
 import io,math,tempfile,re
 from PIL import Image,ImageOps,PngImagePlugin
@@ -68,9 +69,9 @@ def compress_tiff(source,target,strip,check,tick,ratio=1):
         for index in range(count):
             check();original.seek(index)
             baseline={254,256,257,258,259,262,266,273,274,277,278,279,282,283,284,296,317,320,322,323,324,325,338,339,34675}
-            if not strip and set(original.tag_v2)-baseline:raise SkipCompression('TIFF의 추가 메타데이터를 보존하기 위해 건너뜁니다. 메타데이터 삭제 옵션을 켜면 재시도할 수 있습니다.')
+            if not strip and set(original.tag_v2)-baseline:raise SkipCompression('TIFF의 촬영 정보 등 부가정보(메타데이터)를 유지하기 위해 건너뛰었습니다. 해당 정보가 필요 없다면 메타데이터 삭제 옵션을 켜고 다시 시도해 주세요.')
             memory+=original.width*original.height*max(1,len(original.getbands()))
-            if memory>256*1024*1024:raise SkipCompression('큰 다중 페이지 TIFF는 건너뜁니다(디코딩 256MiB 초과).')
+            if memory>256*1024*1024:raise SkipCompression('여러 페이지가 있는 큰 TIFF는 메모리 사용을 줄이기 위해 건너뜁니다. 페이지를 나눠서 다시 시도해 주세요.')
             image=ImageOps.exif_transpose(original).copy()
             if ratio<1:image=image.resize((max(1,round(image.width*ratio)),max(1,round(image.height*ratio))),Image.Resampling.LANCZOS)
             images.append(image);tick(.7*(index+1)/count)
@@ -93,8 +94,8 @@ def compress_image(source,folder,profile,protect_text,strip,check,tick):
     if suffix in {'.tif','.tiff'}:return compress_tiff(source,target,strip,check,tick)
     with Image.open(source) as original:
         if getattr(original,'n_frames',1)>1:raise SkipCompression('움직이는 이미지의 모든 프레임 보존을 위해 압축을 건너뜁니다.')
-        if suffix=='.gif':raise SkipCompression('GIF 팔레트와 투명도 보존을 위해 압축을 건너뜁니다.')
-        if profile=='lossless' and suffix in {'.jpg','.jpeg'}:raise SkipCompression('JPEG 무손실 재압축은 지원하지 않습니다.')
+        if suffix=='.gif':raise SkipCompression('GIF의 색상과 투명도를 유지하기 위해 용량 축소를 건너뛰었습니다.')
+        if profile=='lossless' and suffix in {'.jpg','.jpeg'}:raise SkipCompression('이 설정으로는 JPEG 사진을 더 줄일 수 없습니다. 다른 축소 비율을 선택해 주세요.')
         if profile=='size' and source.stat().st_size<=TARGET_BYTES:raise SkipCompression('이미 1MB 이하입니다.')
         image=ImageOps.exif_transpose(original);image.load();check()
         graphic=protect_text or text_like(image)
@@ -179,7 +180,7 @@ def compress_pdf(source,target,profile,protect_text,strip,check,tick):
     settings=PROFILES[profile];ratio=settings.get('ratio')
     with fitz.open(source) as document:
         if document.needs_pass or document.is_encrypted:raise SkipCompression('암호 PDF는 압축하지 않습니다.')
-        if document.get_sigflags()>0:raise SkipCompression('전자서명/서명 필드가 있는 PDF는 변경하지 않습니다.')
+        if document.get_sigflags()>0:raise SkipCompression('전자서명이 있거나 서명용 칸이 있는 PDF는 원본 보호를 위해 용량을 줄이지 않습니다.')
         snapshots=[];images={};seen_masks=set()
         for number,page in enumerate(document):
             check();snapshots.append(pdf_snapshot(page))
@@ -259,6 +260,6 @@ def compress(files,profile='p80',protect_text=False,strip_metadata=False,control
                 else:row['detail']+=' · 원본보다 작아지지 않아 저장하지 않았습니다.'
             except Cancelled:raise
             except SkipCompression as exc:row['status']='건너뜀';row['detail']=str(exc)
-            except Exception as exc:row['status']='실패';row['detail']=str(exc)
+            except Exception as exc:row['status']='실패';row['detail']=friendly_error(exc,'compression')
             control.rows.append(row);tick(1)
     control.complete();return list(control.outputs)

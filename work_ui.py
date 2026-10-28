@@ -25,7 +25,7 @@ class CompressionDialog(QDialog):
         buttons=QDialogButtonBox();buttons.addButton('용량 축소 시작',QDialogButtonBox.AcceptRole);buttons.addButton('취소',QDialogButtonBox.RejectRole);buttons.accepted.connect(self.save);buttons.rejected.connect(self.reject);form.addRow(buttons)
     def update_hint(self):
         ratio=RATIO_PROFILES[self.profile.currentData()]['ratio']
-        self.hint.setText(f'가로·세로를 각각 원본의 {ratio:.0%}로 줄입니다. 예: 4000×3000 → {round(4000*ratio)}×{round(3000*ratio)}. PDF는 내부 이미지에 적용하며 글자·도형·용지 크기는 유지합니다. 파일 용량 감소율은 다르며, 1MB 목표는 사용하지 않습니다. 작은 글자는 흐려질 수 있습니다.')
+        self.hint.setText(f'가로·세로를 각각 원본의 {ratio:.0%}로 줄입니다. 예: 4000×3000 → {round(4000*ratio)}×{round(3000*ratio)}. PDF는 내부 이미지에 적용하며 글자·도형·용지 크기는 유지합니다. 파일 용량이 줄어드는 정도는 파일마다 다릅니다. 작은 글자는 흐려질 수 있습니다.')
     def options(self):return dict(profile=self.profile.currentData(),protect_text=self.protect.isChecked(),strip_metadata=self.strip.isChecked())
     def save(self):
         options=self.options();s=self.settings;s.setValue('compress_profile',options['profile']);s.setValue('compress_protect',options['protect_text']);s.setValue('compress_strip',options['strip_metadata']);s.setValue('compress_direct',self.remember.isChecked());s.sync();self.accept()

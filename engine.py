@@ -1,6 +1,6 @@
 from pathlib import Path
 import tempfile, shutil, csv, codecs, io
-from PIL import Image, ImageOps
+from PIL import Image
 from image_inputs import IMAGES, frames, white_rgb, stage_images, save_png, page_sizes
 import fitz
 from jobs import JobControl
@@ -25,15 +25,6 @@ def text_import_options(src):
         try: delimiter=csv.Sniffer().sniff(text,delimiters=',;\t').delimiter
         except csv.Error: delimiter=','
     return dict(Origin=origin,DataType=1,TextQualifier=1,ConsecutiveDelimiter=False,Tab=delimiter=='\t',Semicolon=delimiter==';',Comma=delimiter==',',Space=False,Other=False,Local=True)
-
-def save_new(src, desired):
-    desired=Path(desired); n=0
-    while True:
-        p=desired if not n else desired.with_name(f'{desired.stem}_{n}{desired.suffix}')
-        try:
-            with p.open('xb') as out, open(src,'rb') as inp: shutil.copyfileobj(inp,out)
-            return str(p)
-        except FileExistsError: n+=1
 
 class OfficeSession:
     def __init__(self): self.apps={}; self.com=None; self.control=None; self.advance=lambda fraction,text:None
@@ -180,7 +171,12 @@ def to_pdf(src,dest,session=None,control=None,advance=lambda f:None):
                 if original_jpeg:page.insert_image(page.rect,filename=str(src))
                 else:
                     if image.getchannel('A').getextrema()==(255,255):image=image.convert('RGB')
-                    data=io.BytesIO();image.save(data,'PNG',optimize=True);page.insert_image(page.rect,stream=data.getvalue())
+                    if image.mode=='RGB':
+                        pixmap=fitz.Pixmap(fitz.csRGB,image.width,image.height,image.tobytes(),False)
+                        page.insert_image(page.rect,pixmap=pixmap)
+                    else:
+                        # PNG decoding handles straight-alpha premultiplication correctly.
+                        data=io.BytesIO();image.save(data,'PNG',compress_level=1);page.insert_image(page.rect,stream=data.getvalue())
                 advance(.25+.5*(index+1)/(index+2))
             if control:control.check()
             document.save(dest,garbage=4,deflate=True,deflate_images=True)

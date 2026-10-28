@@ -230,3 +230,45 @@ class MouseWatcher(threading.Thread):
             except Exception: time.sleep(1)
             finally:
                 if listener is not None: listener.stop()
+
+
+def initialize_startup(settings,first_run=True):
+    """Enable once by default; preserve explicit choices on subsequent runs."""
+    if not settings.contains('startup_enabled'):
+        enabled=True if first_run else startup_enabled()
+        set_startup(enabled)
+        settings.setValue('startup_enabled',enabled)
+        settings.sync()
+    elif startup_enabled():
+        # Refresh an existing registration after portable-directory moves.
+        set_startup(True)
+
+
+def apply_install_options(arguments):
+    """Apply the installer's explicit choice, before single-instance forwarding."""
+    choice=next((arg.rsplit('=',1)[1] for arg in arguments
+                 if arg in ('--desktop-shortcut=0','--desktop-shortcut=1')),None)
+    if choice is None or not getattr(sys,'frozen',False):return
+    import pythoncom,win32com.client
+    pythoncom.CoInitialize()
+    try:
+        # Velopack's root launcher stays stable when the current directory updates.
+        root=Path(sys.executable).parent.parent
+        launcher=next((path for path in (root/'BakuriFileConverter.exe',root/'바꾸리.exe') if path.is_file()),root/'BakuriFileConverter.exe')
+        if not (root/'Update.exe').is_file() or not launcher.is_file():
+            raise RuntimeError('설치된 바꾸리를 찾지 못했습니다.')
+        shell=win32com.client.Dispatch('WScript.Shell')
+        link=Path(shell.SpecialFolders('Desktop'))/'바꾸리.lnk'
+        if choice=='1':
+            shortcut=shell.CreateShortcut(str(link))
+            shortcut.TargetPath=str(launcher);shortcut.WorkingDirectory=str(root)
+            shortcut.Description='바꾸리 파일 변환기';shortcut.Save()
+        elif link.exists():
+            shortcut=shell.CreateShortcut(str(link))
+            target=Path(shortcut.TargetPath)
+            if target.resolve() in {launcher.resolve(),Path(sys.executable).resolve()}:
+                link.unlink()
+    except Exception as exc:
+        ctypes.windll.user32.MessageBoxW(None,friendly_error(exc,'settings'),'바로가기 설정',48)
+    finally:
+        pythoncom.CoUninitialize()

@@ -1,23 +1,13 @@
 """A light design: exact sRGB accent #2E83F2, shared by window and popup."""
 from pathlib import Path
 from functools import lru_cache
-from PySide6.QtGui import QIcon, QImage, QPixmap
+from PySide6.QtGui import QIcon
 ACCENT='#2E83F2'
 ASSETS=Path(__file__).resolve().parent/'assets'
 @lru_cache(maxsize=32)
 def icon(name):
     if name=='app':return QIcon(str(ASSETS/'app.ico'))
-    if name=='tray':
-        # Remove white using an alpha matte, retaining blue antialiased edges.
-        # The tray uses precisely the approved app silhouette, not a redrawn icon.
-        image=QImage(str(ASSETS/'app.png')).convertToFormat(QImage.Format_ARGB32)
-        for y in range(image.height()):
-            for x in range(image.width()):
-                c=image.pixelColor(x,y)
-                if not c.alpha():continue
-                coverage=max(0.0,min(1.0,(255-c.red())/(255-46)))
-                c.setRgb(46,131,242,round(c.alpha()*coverage));image.setPixelColor(x,y,c)
-        return QIcon(QPixmap.fromImage(image))
+    if name=='tray':return QIcon(str(ASSETS/'tray.png'))
     return QIcon(str(ASSETS/(name+'.svg')))
 
 def stylesheet():

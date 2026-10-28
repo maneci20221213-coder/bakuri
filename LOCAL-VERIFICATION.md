@@ -20,3 +20,15 @@ win-x64 설치본·stable 업데이트 피드·소스 ZIP 생성 및 GitHub v0.1
 빌드: https://github.com/maneci20221213-coder/bakuri/actions/runs/40661789184
 릴리스: https://github.com/maneci20221213-coder/bakuri/releases/tag/v0.14.2
 실제 설치·제거·두 버전 간 업데이트·한글/Office 실행과 화면 배치는 아직 별도 확인이 필요합니다.
+
+
+## 0.14.5 refactoring
+
+- 102 local regression tests passed (Linux/offscreen; Office automation uses doubles).
+- Settings UI and file-list UI extracted; removed unused save_new and obsolete runtime-folder launcher/build/emulation/self-test scripts. Git history retains these scripts. Legacy registry/IPC names and migrations remain for compatibility.
+- File duplicate lookup is one set per added batch, instead of scanning all existing rows per input. Disconnected IPC clients are released.
+- Tray matte is generated at build time; no per-pixel work at startup.
+- Removed only unused Pillow AVIF decoder from frozen build (7,833,600 bytes in previous package). PDF engine and software OpenGL fallback retained. Final archive sizes are measured in Windows CI.
+- PNG-to-PDF benchmark: 1800×2400 images, median of 3 runs on the same Linux host. Document 0.2750 → 0.1632 seconds; synthetic photo/noise 1.3191 → 0.5942; transparent 0.3269 → 0.2445. All rendered pixels identical; output sizes unchanged except one byte in document PDF metadata. These are sample conversion results, not a general speed guarantee.
+- Windows CI additionally compiles the installer UI, checks its checkbox/cancellation, installs the real frozen app in an isolated folder, and exercises desktop shortcut creation/removal with the stable launcher. The tiny .NET Framework UI wraps the existing Velopack payload; update packages keep using Velopack directly.
+- Default startup applies only to new preferences; prior disabled users and later explicit opt-outs are preserved. Windows shell integration remains disabled in ordinary automated tests to protect the runner.

@@ -10,7 +10,7 @@ if (-not (Test-Path '.release-venv\Scripts\python.exe')) { RunChecked { py -3.12
 $Python=Join-Path $PSScriptRoot '.release-venv\Scripts\python.exe'
 RunChecked { & $Python -m pip install -r requirements.txt pyinstaller==6.16.0 }
 RunChecked { & $Python build_metadata.py }
-RunChecked { & $Python -m PyInstaller --noconfirm --clean --noupx --windowed --onedir --name BakuriFileConverter --icon assets/app.ico --version-file version-resource.txt --add-data 'assets;assets' --add-data 'USER-GUIDE.md;.' --add-data 'LICENSES;LICENSES' --add-data 'LICENSE-AGPL-3.0.txt;.' --add-data 'README.md;.' --add-binary 'FilePathCheckerModuleExample.dll;.' --hidden-import win32timezone --hidden-import win32com.shell.shell --collect-submodules pynput --collect-all velopack app.py }
+RunChecked { & $Python -m PyInstaller --noconfirm --clean --noupx --windowed --onedir --name BakuriFileConverter --icon assets/app.ico --version-file version-resource.txt --add-data 'assets;assets' --add-data 'USER-GUIDE.md;.' --add-data 'LICENSES;LICENSES' --add-data 'LICENSE-AGPL-3.0.txt;.' --add-data 'README.md;.' --add-binary 'FilePathCheckerModuleExample.dll;.' --hidden-import win32timezone --hidden-import win32com.shell.shell --exclude-module PIL.AvifImagePlugin --exclude-module PIL._avif --collect-submodules pynput --collect-all velopack app.py }
 $PackDir=Join-Path $PSScriptRoot 'dist\BakuriFileConverter'
 @{source='github';url=$RepositoryUrl;channel='stable'} | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $PackDir 'update-config.json')
 Copy-Item 'LICENSES' (Join-Path $PackDir 'LICENSES') -Recurse -Force
@@ -48,10 +48,17 @@ try {
  $env:BAKURI_DISABLE_SHELL_INTEGRATION=$PreviousIntegration
 }
 if (-not (Test-Path '.vpk-tools\vpk.exe')) { RunChecked { dotnet tool install vpk --version 1.2.161 --tool-path .vpk-tools } }
-RunChecked { & '.\.vpk-tools\vpk.exe' pack --packId Bakuri.FileConverter --packVersion $Version --packDir $PackDir --mainExe BakuriFileConverter.exe --runtime win-x64 --channel stable --packTitle '바꾸리' --icon assets/app.ico --releaseNotes RELEASE-NOTES.md --outputDir '.\Releases' }
+RunChecked { & '.\.vpk-tools\vpk.exe' pack --packId Bakuri.FileConverter --packVersion $Version --packDir $PackDir --mainExe BakuriFileConverter.exe --runtime win-x64 --channel stable --shortcuts StartMenuRoot --packTitle '바꾸리' --icon assets/app.ico --releaseNotes RELEASE-NOTES.md --outputDir '.\Releases' }
 $Setups=@(Get-ChildItem 'Releases' -File -Filter '*Setup.exe')
 if ($Setups.Count -ne 1) { throw 'Expected exactly one generated Setup.exe.' }
-Copy-Item $Setups[0].FullName 'Releases\BakuriSetup.exe' -Force
+# Windows includes .NET Framework: no new runtime is bundled for this small UI.
+$Compiler=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+RunChecked { & $Compiler /nologo /target:winexe /optimize+ /platform:anycpu /codepage:65001 /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /win32icon:assets/app.ico "/resource:$($Setups[0].FullName),Bakuri.Setup" /out:Releases\BakuriSetup.exe installer.cs }
+RunChecked { & $Compiler /nologo /target:exe /optimize+ /codepage:65001 /main:VerifyInstaller /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Core.dll /out:verify-installer.exe installer.cs verify_installer.cs }
+RunChecked { & '.\verify-installer.exe' }
+& (Join-Path $PSScriptRoot 'verify_installation.ps1') -Setup $Setups[0].FullName
+# Only expose the installer that offers the shortcut choice.
+Remove-Item $Setups[0].FullName
 if (-not (Test-Path 'Releases\releases.stable.json')) { throw 'Missing stable update feed.' }
 if (-not (Get-ChildItem 'Releases' -Filter '*-full.nupkg')) { throw 'Missing full update package.' }
 RunChecked { & $Python prepare_source.py }

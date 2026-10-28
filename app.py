@@ -1,4 +1,4 @@
-import sys, os, threading, re, json, time
+import sys, os, threading, json, time
 from pathlib import Path
 from user_messages import friendly_error
 
@@ -17,6 +17,8 @@ from PySide6.QtCore import Qt, Signal, QObject, QTimer, QSize, QSettings, QEvent
 from PySide6.QtGui import QIcon, QAction, QCursor, QDesktopServices, QColor, QBrush, QShortcut
 from PySide6.QtWidgets import *
 from engine import convert, SUPPORTED, SPREADSHEETS, can_convert, IMAGES
+from file_list import Files,natural_key
+from settings_ui import SettingsDialog
 from theme import ACCENT, icon, stylesheet
 from version import VERSION
 from jobs import JobControl,Cancelled
@@ -36,119 +38,6 @@ class OutputFormatDelegate(QStyledItemDelegate):
 
 class Events(QObject):
     message=Signal(str); done=Signal(object); error=Signal(str); selected=Signal(object); clicked=Signal(object); dismiss=Signal(); popup_key=Signal(int); progress=Signal(int,str)
-def natural_key(text):
-    return tuple((1,int(p)) if p.isdigit() else (0,p.casefold()) for p in re.split(r'(\d+)',text))
-
-class SettingsDialog(QDialog):
-    def __init__(self,window):
-        super().__init__(window); self.window=window; self.setWindowTitle('바꾸리 설정'); form=QFormLayout(self)
-        self.enabled=QCheckBox('단축키 사용'); self.enabled.setChecked(window.settings.value('hotkey_enabled',True,type=bool)); form.addRow(self.enabled)
-        self.key=QComboBox(); self.key.addItems(['` (백틱)','F8','F9','Ctrl+Alt+B']); self.key.setCurrentText(window.settings.value('hotkey','` (백틱)')); form.addRow('단축키',self.key)
-        hint=QLabel('탐색기·바탕화면에서 작동합니다. 다른 앱과 충돌하면 F8 또는 Ctrl+Alt+B로 바꿔 주세요.'); hint.setWordWrap(True); form.addRow(hint)
-        self.auto=QCheckBox('윈도우 로그인 시 백그라운드 실행')
-        if sys.platform=='win32':
-            from windows import startup_enabled
-            self.auto.setChecked(startup_enabled())
-        else: self.auto.setEnabled(False)
-        form.addRow(self.auto)
-        self.explorer=QCheckBox('탐색기 우클릭 메뉴 추가'); self.explorer.setChecked(window.settings.value('explorer',True,type=bool)); form.addRow(self.explorer)
-        self.repair_menu=QPushButton('우클릭 메뉴 다시 등록');self.repair_menu.setEnabled(sys.platform=='win32');self.repair_menu.clicked.connect(self.restore_menu);form.addRow(self.repair_menu)
-        self.dpi=QComboBox(); self.dpi.addItems(['96','150','200','300']); self.dpi.setCurrentText(str(window.settings.value('dpi',150,type=int))); form.addRow('PDF 이미지 해상도',self.dpi)
-        self.image_mode=QComboBox();self.image_mode.addItem('표 배경으로 채우기 (기본)','background');self.image_mode.addItem('표 안에 이미지 넣기','inline');self.image_mode.setCurrentIndex(max(0,self.image_mode.findData(window.settings.value('image_mode','background'))));form.addRow('이미지 → 한글 배치',self.image_mode)
-        self.compress_profile=QComboBox();add_profiles(self.compress_profile);self.compress_profile.setCurrentIndex(self.compress_profile.findData(read_options(window.settings)['profile']));form.addRow('해상도 축소 기본값',self.compress_profile)
-        self.compress_protect=QCheckBox('글자 보호 강화 · 이미지 해상도 유지');self.compress_protect.setChecked(window.settings.value('compress_protect',False,type=bool));form.addRow(self.compress_protect)
-        self.compress_strip=QCheckBox('용량 축소 시 위치정보 등 메타데이터 삭제');self.compress_strip.setChecked(window.settings.value('compress_strip',False,type=bool));form.addRow(self.compress_strip)
-        self.compress_direct=QCheckBox('팝업에서 설정창 없이 용량 축소 실행');self.compress_direct.setChecked(window.settings.value('compress_direct',False,type=bool));form.addRow(self.compress_direct)
-        self.notify=QCheckBox('변환 완료 알림'); self.notify.setChecked(window.settings.value('notify',True,type=bool)); form.addRow(self.notify)
-        buttons=QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel); buttons.accepted.connect(self.save); buttons.rejected.connect(self.reject); form.addRow(buttons)
-    def restore_menu(self):
-        try:
-            from windows import register_menu
-            register_menu(True)
-            self.window.settings.setValue('explorer',True);self.window.settings.sync()
-            self.explorer.setChecked(True)
-            QMessageBox.information(self,'우클릭 메뉴 등록','현재 사용자 계정에 등록했습니다. 탐색기에서 파일을 다시 우클릭해 주세요.')
-        except Exception as exc:QMessageBox.warning(self,'우클릭 메뉴를 추가하지 못했어요',friendly_error(exc,'menu'))
-    def save(self):
-        try:
-            if sys.platform=='win32':
-                from windows import set_startup,register_menu
-                set_startup(self.auto.isChecked()); register_menu(self.explorer.isChecked())
-            s=self.window.settings; s.setValue('hotkey_enabled',self.enabled.isChecked()); s.setValue('hotkey',self.key.currentText()); s.setValue('notify',self.notify.isChecked()); s.setValue('explorer',self.explorer.isChecked()); s.setValue('dpi',int(self.dpi.currentText()));s.setValue('image_mode',self.image_mode.currentData());s.setValue('compress_profile',self.compress_profile.currentData());s.setValue('compress_protect',self.compress_protect.isChecked());s.setValue('compress_strip',self.compress_strip.isChecked());s.setValue('compress_direct',self.compress_direct.isChecked()); s.sync();
-            if hasattr(self.window,'watcher'): self.window.watcher.update_settings(s)
-            self.accept()
-        except Exception as e: QMessageBox.warning(self,'설정을 저장하지 못했어요',friendly_error(e,'settings'))
-
-class Files(QTreeWidget):
-    changed=Signal()
-    def __init__(self):
-        super().__init__(); self.setColumnCount(4); self.setHeaderLabels(['','미리보기','파일명','용량'])
-        self.setRootIsDecorated(False); self.setAlternatingRowColors(False); self.setStyleSheet(stylesheet())
-        self.setUniformRowHeights(True); self.setIndentation(0)
-
-        self.setColumnWidth(0,84); self.setColumnWidth(1,100); self.setColumnWidth(3,115); self.header().setSectionResizeMode(2,QHeaderView.Stretch)
-        self.setIconSize(QSize(34,38)); self.setAcceptDrops(True); self.setDragDropMode(QAbstractItemView.InternalMove)
-        self.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.setContextMenuPolicy(Qt.CustomContextMenu); self.customContextMenuRequested.connect(self.context_menu)
-        self.selection_caption=QLabel('선택',self.header().viewport()); self.selection_caption.setObjectName('selectionCaption'); self.selection_caption.setAttribute(Qt.WA_TransparentForMouseEvents)
-        self.master=QCheckBox(self.header().viewport()); self.master.setTristate(True); self.master.setToolTip('전체 선택 / 해제'); self.master.setAccessibleName('전체 선택')
-        self.master.clicked.connect(lambda:self.check_all(Qt.Checked if self.master.checkState()!=Qt.Unchecked else Qt.Unchecked))
-        self.header().sectionResized.connect(self.place_master); self.header().geometriesChanged.connect(self.place_master); self.header().sectionMoved.connect(self.place_master); self.itemChanged.connect(lambda *_:self.sync_master()); self.place_master()
-    def delete_selected(self):
-        if not self.isEnabled(): return
-        for item in self.selectedItems(): self.takeTopLevelItem(self.indexOfTopLevelItem(item))
-        self.sync_master()
-    def keyPressEvent(self,event):
-        if event.key()==Qt.Key_Delete: self.delete_selected(); event.accept()
-        else: super().keyPressEvent(event)
-    def context_menu(self,point):
-        item=self.itemAt(point)
-        if item is None: return
-        if not item.isSelected(): self.clearSelection(); item.setSelected(True)
-        menu=QMenu(self); menu.addAction('목록에서 삭제',self.delete_selected); menu.exec(self.viewport().mapToGlobal(point))
-    def place_master(self,*_):
-        x=self.header().sectionViewportPosition(0);h=max(36,self.header().height())
-        self.master.setGeometry(x+8,(h-24)//2,20,24); self.selection_caption.setGeometry(x+34,0,39,h)
-    def sync_master(self):
-        n=self.count(); c=sum(self.item(i).checkState(0)==Qt.Checked for i in range(n))
-        self.master.setCheckState(Qt.Unchecked if c==0 else Qt.Checked if c==n else Qt.PartiallyChecked); self.changed.emit()
-    def count(self): return self.topLevelItemCount()
-    def item(self,i): return self.topLevelItem(i)
-    def takeItem(self,i):
-        item=self.takeTopLevelItem(i); self.sync_master(); return item
-    def clear(self): super().clear(); self.sync_master()
-    def dragEnterEvent(self,e):
-        if e.mimeData().hasUrls(): e.acceptProposedAction()
-        else: super().dragEnterEvent(e)
-    def dragMoveEvent(self,e):
-        if e.mimeData().hasUrls(): e.acceptProposedAction()
-        else: super().dragMoveEvent(e)
-    def dropEvent(self,e):
-        if e.mimeData().hasUrls(): self.add_paths([u.toLocalFile() for u in e.mimeData().urls()]); e.acceptProposedAction()
-        else:
-            index=self.indexAt(e.position().toPoint())
-            # Tree rows must stay flat: only between-row drops are allowed.
-            if self.dropIndicatorPosition()==QAbstractItemView.OnItem: e.ignore(); return
-            super().dropEvent(e)
-        self.sync_master()
-    def add_paths(self,paths):
-        for p in paths:
-            path=Path(p)
-            if path.is_file() and path.suffix.lower() in SUPPORTED and not any(os.path.normcase(self.item(i).data(0,Qt.UserRole))==os.path.normcase(str(path.resolve())) for i in range(self.count())):
-                size=path.stat().st_size; label=f'{size/1048576:.1f} MB' if size>=1048576 else f'{size/1024:.1f} KB'
-                item=QTreeWidgetItem(['','',path.name,label]); item.setData(0,Qt.UserRole,str(path.resolve())); item.setToolTip(2,str(path))
-                item.setIcon(1,QIcon(str(path)) if path.suffix.lower() in IMAGES else icon('xlsx' if path.suffix.lower() in SPREADSHEETS else 'hwpx' if path.suffix.lower() in {'.hwp','.hwpx'} else 'pdf' if path.suffix.lower()=='.pdf' else 'odt'))
-                item.setFlags((item.flags()|Qt.ItemIsUserCheckable)&~Qt.ItemIsDropEnabled); item.setCheckState(0,Qt.Checked); item.setSizeHint(0,QSize(70,60)); self.addTopLevelItem(item)
-        self.sync_master()
-    def sort_names(self):
-        items=[self.takeTopLevelItem(0) for _ in range(self.count())]
-        self.addTopLevelItems(sorted(items,key=lambda item:natural_key(item.text(2)))); self.sync_master()
-    def check_all(self,state):
-        self.blockSignals(True)
-        for i in range(self.count()): self.item(i).setCheckState(0,state)
-        self.blockSignals(False); self.sync_master()
-    def checked_paths(self): return [self.item(i).data(0,Qt.UserRole) for i in range(self.count()) if self.item(i).checkState(0)==Qt.Checked]
-
 class QuickPopup(QWidget):
     chosen=Signal(str); visibility=Signal(bool)
     def __init__(self):
@@ -266,6 +155,7 @@ class QuickPopup(QWidget):
 class Window(QWidget):
     def __init__(self):
         super().__init__(); self.bus=Events(); self.busy=False;self.control=None;self.compression_rows=[];self.job_kind='convert'; self.settings=QSettings('Bakuri','FileConverter')
+        first_run=not self.settings.allKeys() and not QSettings('Bakuri','Python Trial').allKeys()
         if not self.settings.value('settings_migrated',False,type=bool):
             legacy=QSettings('Bakuri','Python Trial')
             for key in legacy.allKeys():
@@ -280,6 +170,7 @@ class Window(QWidget):
         row.addStretch();self.count_label=QLabel('0 / 0개 선택');self.count_label.setObjectName('selectionCount');row.addWidget(self.count_label)
         settings_button=QPushButton();settings_button.setObjectName('settings');settings_button.setIcon(icon('gear'));settings_button.setAccessibleName('설정');settings_button.setToolTip('설정');settings_button.clicked.connect(self.open_settings);row.addWidget(settings_button)
         self.help_button=QPushButton('?');self.help_button.setObjectName('help');self.help_button.setAccessibleName('사용 설명');self.help_button.setToolTip('사용 설명 (F1)');self.help_button.clicked.connect(self.open_help);row.addWidget(self.help_button)
+        settings_button.setFixedSize(40,40);self.help_button.setFixedSize(40,40)
         self.help_shortcut=QShortcut('F1',self);self.help_shortcut.activated.connect(self.open_help)
         layout.addWidget(toolbar)
         self.files=Files();self.files.changed.connect(self.refresh_count);layout.addWidget(self.files,1)
@@ -307,9 +198,9 @@ class Window(QWidget):
         self.progress_popup=ProgressPopup();self.progress_popup.stop_requested.connect(self.request_stop);self.bus.progress.connect(self.update_progress)
         self.bus.message.connect(self.status.setText); self.bus.error.connect(self.failed); self.bus.done.connect(self.finished); self.bus.selected.connect(self.receive)
         if sys.platform=='win32' and os.environ.get('BAKURI_DISABLE_SHELL_INTEGRATION')!='1':
-            from windows import SelectionWatcher,MouseWatcher,register_menu,migrate_menu,startup_enabled,set_startup
+            from windows import SelectionWatcher,MouseWatcher,migrate_menu,initialize_startup
             try:
-                if startup_enabled():set_startup(True)
+                initialize_startup(self.settings,first_run=first_run)
                 if migrate_menu(self.settings.value('explorer',True,type=bool)):
                     self.settings.setValue('explorer',True);self.settings.sync()
             except Exception as exc:self.status.setText(friendly_error(exc,'menu'))
@@ -469,6 +360,9 @@ class Window(QWidget):
 
 if __name__=='__main__':
     app=QApplication(sys.argv); app.setQuitOnLastWindowClosed(False)
+    if sys.platform=='win32':
+        from windows import apply_install_options
+        apply_install_options(sys.argv)
     from PySide6.QtNetwork import QLocalSocket, QLocalServer
     socket=QLocalSocket(); socket.connectToServer('BakuriPythonTrial')
     paths=sys.argv[sys.argv.index('--add-files')+1:] if '--add-files' in sys.argv else []
@@ -491,6 +385,10 @@ if __name__=='__main__':
                         elif received:win.show();win.raise_();win.activateWindow()
                     except (ValueError,TypeError): pass
                     client.disconnectFromServer()
+            def release(client=client):
+                if client in clients:clients.remove(client)
+                client.deleteLater()
+            client.disconnected.connect(release)
             client.readyRead.connect(read); read()
     server.newConnection.connect(accept)
     if paths: win.files.add_paths(paths)

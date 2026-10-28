@@ -1,0 +1,17 @@
+runtime/
+__pycache__/
+*.pyc
+.build-venv/
+.release-venv/
+.vpk-tools/
+build/
+dist/
+Releases/
+SourcePackages/
+*.spec
+version-resource.txt
+*.log
+TEST-RESULTS.txt
+TEST-SUMMARY.json
+BUILD-REPORT.json
+BakuriFileConverter.exe

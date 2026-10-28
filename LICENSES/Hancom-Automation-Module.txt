@@ -1,0 +1,8 @@
+Hancom Automation security module — original, unmodified official binary.
+Source guide: https://developer.hancom.com/hwpautomation
+Download linked by that guide:
+https://github.com/hancom-io/devcenter-archive/raw/main/hwp-automation/보안모듈(Automation).zip
+File: FilePathCheckerModuleExample.dll (x86)
+This component is not covered by the PDFsharp MIT license.
+Hancom's guide permits personal non-commercial use of HwpAutomation; commercial use requires a separate license/approval.
+No new license is granted by this package. See the official guide for current terms.

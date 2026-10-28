@@ -1,0 +1,497 @@
+if __name__=='__main__':
+    from velopack_bootstrap import bootstrap
+    bootstrap()
+
+import sys, os, threading, re, json, time
+from pathlib import Path
+
+def startup_error(kind,value,tb):
+    import traceback
+    text=''.join(traceback.format_exception(kind,value,tb))
+    folder=Path(os.environ.get('LOCALAPPDATA',str(Path.home())))/'Bakuri'; folder.mkdir(parents=True,exist_ok=True)
+    log=folder/'error.log'; log.write_text(text,encoding='utf-8')
+    if sys.platform=='win32':
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(None,'실행 오류가 발생했습니다.\n'+str(log)+'\n\n'+str(value),'바꾸리',16)
+sys.excepthook=startup_error
+
+from PySide6.QtCore import Qt, Signal, QObject, QTimer, QSize, QSettings, QEvent, QUrl, QPoint
+from PySide6.QtGui import QIcon, QAction, QCursor, QDesktopServices, QColor, QBrush
+from PySide6.QtWidgets import *
+from engine import convert, SUPPORTED, SPREADSHEETS, can_convert, IMAGES
+from theme import ACCENT, icon, stylesheet
+from version import VERSION
+from jobs import JobControl,Cancelled
+from compression import compress
+from work_ui import CompressionDialog,ProgressPopup,CompressionResults,add_profiles,read_options
+
+class OutputFormatDelegate(QStyledItemDelegate):
+    def paint(self,painter,option,index):
+        if not index.flags() & Qt.ItemIsEnabled:
+            opt=QStyleOptionViewItem(option);self.initStyleOption(opt,index)
+            painter.save();painter.fillRect(opt.rect,QColor('#F2F5F9'))
+            painter.setPen(QColor('#A4AFBD'));painter.setFont(opt.font)
+            painter.drawText(opt.rect.adjusted(6,0,-4,0),Qt.AlignVCenter|Qt.AlignLeft,opt.text)
+            painter.restore()
+        else:super().paint(painter,option,index)
+
+class Events(QObject):
+    message=Signal(str); done=Signal(object); error=Signal(str); selected=Signal(object); clicked=Signal(object); dismiss=Signal(); popup_key=Signal(int); progress=Signal(int,str)
+def natural_key(text):
+    return tuple((1,int(p)) if p.isdigit() else (0,p.casefold()) for p in re.split(r'(\d+)',text))
+
+class SettingsDialog(QDialog):
+    def __init__(self,window):
+        super().__init__(window); self.window=window; self.setWindowTitle('바꾸리 설정'); form=QFormLayout(self)
+        self.enabled=QCheckBox('단축키 사용'); self.enabled.setChecked(window.settings.value('hotkey_enabled',True,type=bool)); form.addRow(self.enabled)
+        self.key=QComboBox(); self.key.addItems(['` (백틱)','F8','F9','Ctrl+Alt+B']); self.key.setCurrentText(window.settings.value('hotkey','` (백틱)')); form.addRow('단축키',self.key)
+        hint=QLabel('탐색기·바탕화면에서 작동합니다. 다른 앱과 충돌하면 F8 또는 Ctrl+Alt+B로 바꿔 주세요.'); hint.setWordWrap(True); form.addRow(hint)
+        self.auto=QCheckBox('윈도우 로그인 시 백그라운드 실행')
+        if sys.platform=='win32':
+            from windows import startup_enabled
+            self.auto.setChecked(startup_enabled())
+        else: self.auto.setEnabled(False)
+        form.addRow(self.auto)
+        self.explorer=QCheckBox('탐색기 우클릭 메뉴 추가'); self.explorer.setChecked(window.settings.value('explorer',True,type=bool)); form.addRow(self.explorer)
+        self.repair_menu=QPushButton('우클릭 메뉴 다시 등록');self.repair_menu.setEnabled(sys.platform=='win32');self.repair_menu.clicked.connect(self.restore_menu);form.addRow(self.repair_menu)
+        self.dpi=QComboBox(); self.dpi.addItems(['96','150','200','300']); self.dpi.setCurrentText(str(window.settings.value('dpi',150,type=int))); form.addRow('PDF 이미지 해상도',self.dpi)
+        self.image_mode=QComboBox();self.image_mode.addItem('표 배경으로 채우기 (기본)','background');self.image_mode.addItem('표 안에 이미지 넣기','inline');self.image_mode.setCurrentIndex(max(0,self.image_mode.findData(window.settings.value('image_mode','background'))));form.addRow('이미지 → 한글 배치',self.image_mode)
+        self.compress_profile=QComboBox();add_profiles(self.compress_profile);self.compress_profile.setCurrentIndex(self.compress_profile.findData(read_options(window.settings)['profile']));form.addRow('해상도 축소 기본값',self.compress_profile)
+        self.compress_protect=QCheckBox('글자 보호 강화 · 이미지 해상도 유지');self.compress_protect.setChecked(window.settings.value('compress_protect',False,type=bool));form.addRow(self.compress_protect)
+        self.compress_strip=QCheckBox('용량 축소 시 위치정보 등 메타데이터 삭제');self.compress_strip.setChecked(window.settings.value('compress_strip',False,type=bool));form.addRow(self.compress_strip)
+        self.compress_direct=QCheckBox('팝업에서 설정창 없이 용량 축소 실행');self.compress_direct.setChecked(window.settings.value('compress_direct',False,type=bool));form.addRow(self.compress_direct)
+        self.notify=QCheckBox('변환 완료 알림'); self.notify.setChecked(window.settings.value('notify',True,type=bool)); form.addRow(self.notify)
+        buttons=QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel); buttons.accepted.connect(self.save); buttons.rejected.connect(self.reject); form.addRow(buttons)
+    def restore_menu(self):
+        try:
+            from windows import register_menu
+            register_menu(True)
+            self.window.settings.setValue('explorer',True);self.window.settings.sync()
+            self.explorer.setChecked(True)
+            QMessageBox.information(self,'우클릭 메뉴 등록','현재 사용자 계정에 등록했습니다. 탐색기에서 파일을 다시 우클릭해 주세요.')
+        except Exception as exc:QMessageBox.warning(self,'우클릭 메뉴 등록 실패',str(exc))
+    def save(self):
+        try:
+            if sys.platform=='win32':
+                from windows import set_startup,register_menu
+                set_startup(self.auto.isChecked()); register_menu(self.explorer.isChecked())
+            s=self.window.settings; s.setValue('hotkey_enabled',self.enabled.isChecked()); s.setValue('hotkey',self.key.currentText()); s.setValue('notify',self.notify.isChecked()); s.setValue('explorer',self.explorer.isChecked()); s.setValue('dpi',int(self.dpi.currentText()));s.setValue('image_mode',self.image_mode.currentData());s.setValue('compress_profile',self.compress_profile.currentData());s.setValue('compress_protect',self.compress_protect.isChecked());s.setValue('compress_strip',self.compress_strip.isChecked());s.setValue('compress_direct',self.compress_direct.isChecked()); s.sync();
+            if hasattr(self.window,'watcher'): self.window.watcher.update_settings(s)
+            self.accept()
+        except Exception as e: QMessageBox.warning(self,'설정 저장 실패',str(e))
+
+class Files(QTreeWidget):
+    changed=Signal()
+    def __init__(self):
+        super().__init__(); self.setColumnCount(4); self.setHeaderLabels(['','미리보기','파일명','용량'])
+        self.setRootIsDecorated(False); self.setAlternatingRowColors(False); self.setStyleSheet(stylesheet())
+        self.setUniformRowHeights(True); self.setIndentation(0)
+
+        self.setColumnWidth(0,84); self.setColumnWidth(1,100); self.setColumnWidth(3,115); self.header().setSectionResizeMode(2,QHeaderView.Stretch)
+        self.setIconSize(QSize(34,38)); self.setAcceptDrops(True); self.setDragDropMode(QAbstractItemView.InternalMove)
+        self.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.setContextMenuPolicy(Qt.CustomContextMenu); self.customContextMenuRequested.connect(self.context_menu)
+        self.selection_caption=QLabel('선택',self.header().viewport()); self.selection_caption.setObjectName('selectionCaption'); self.selection_caption.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.master=QCheckBox(self.header().viewport()); self.master.setTristate(True); self.master.setToolTip('전체 선택 / 해제'); self.master.setAccessibleName('전체 선택')
+        self.master.clicked.connect(lambda:self.check_all(Qt.Checked if self.master.checkState()!=Qt.Unchecked else Qt.Unchecked))
+        self.header().sectionResized.connect(self.place_master); self.header().geometriesChanged.connect(self.place_master); self.header().sectionMoved.connect(self.place_master); self.itemChanged.connect(lambda *_:self.sync_master()); self.place_master()
+    def delete_selected(self):
+        if not self.isEnabled(): return
+        for item in self.selectedItems(): self.takeTopLevelItem(self.indexOfTopLevelItem(item))
+        self.sync_master()
+    def keyPressEvent(self,event):
+        if event.key()==Qt.Key_Delete: self.delete_selected(); event.accept()
+        else: super().keyPressEvent(event)
+    def context_menu(self,point):
+        item=self.itemAt(point)
+        if item is None: return
+        if not item.isSelected(): self.clearSelection(); item.setSelected(True)
+        menu=QMenu(self); menu.addAction('목록에서 삭제',self.delete_selected); menu.exec(self.viewport().mapToGlobal(point))
+    def place_master(self,*_):
+        x=self.header().sectionViewportPosition(0);h=max(36,self.header().height())
+        self.master.setGeometry(x+8,(h-24)//2,20,24); self.selection_caption.setGeometry(x+34,0,39,h)
+    def sync_master(self):
+        n=self.count(); c=sum(self.item(i).checkState(0)==Qt.Checked for i in range(n))
+        self.master.setCheckState(Qt.Unchecked if c==0 else Qt.Checked if c==n else Qt.PartiallyChecked); self.changed.emit()
+    def count(self): return self.topLevelItemCount()
+    def item(self,i): return self.topLevelItem(i)
+    def takeItem(self,i):
+        item=self.takeTopLevelItem(i); self.sync_master(); return item
+    def clear(self): super().clear(); self.sync_master()
+    def dragEnterEvent(self,e):
+        if e.mimeData().hasUrls(): e.acceptProposedAction()
+        else: super().dragEnterEvent(e)
+    def dragMoveEvent(self,e):
+        if e.mimeData().hasUrls(): e.acceptProposedAction()
+        else: super().dragMoveEvent(e)
+    def dropEvent(self,e):
+        if e.mimeData().hasUrls(): self.add_paths([u.toLocalFile() for u in e.mimeData().urls()]); e.acceptProposedAction()
+        else:
+            index=self.indexAt(e.position().toPoint())
+            # Tree rows must stay flat: only between-row drops are allowed.
+            if self.dropIndicatorPosition()==QAbstractItemView.OnItem: e.ignore(); return
+            super().dropEvent(e)
+        self.sync_master()
+    def add_paths(self,paths):
+        for p in paths:
+            path=Path(p)
+            if path.is_file() and path.suffix.lower() in SUPPORTED and not any(os.path.normcase(self.item(i).data(0,Qt.UserRole))==os.path.normcase(str(path.resolve())) for i in range(self.count())):
+                size=path.stat().st_size; label=f'{size/1048576:.1f} MB' if size>=1048576 else f'{size/1024:.1f} KB'
+                item=QTreeWidgetItem(['','',path.name,label]); item.setData(0,Qt.UserRole,str(path.resolve())); item.setToolTip(2,str(path))
+                item.setIcon(1,QIcon(str(path)) if path.suffix.lower() in IMAGES else icon('xlsx' if path.suffix.lower() in SPREADSHEETS else 'hwpx' if path.suffix.lower() in {'.hwp','.hwpx'} else 'pdf' if path.suffix.lower()=='.pdf' else 'odt'))
+                item.setFlags((item.flags()|Qt.ItemIsUserCheckable)&~Qt.ItemIsDropEnabled); item.setCheckState(0,Qt.Checked); item.setSizeHint(0,QSize(70,60)); self.addTopLevelItem(item)
+        self.sync_master()
+    def sort_names(self):
+        items=[self.takeTopLevelItem(0) for _ in range(self.count())]
+        self.addTopLevelItems(sorted(items,key=lambda item:natural_key(item.text(2)))); self.sync_master()
+    def check_all(self,state):
+        self.blockSignals(True)
+        for i in range(self.count()): self.item(i).setCheckState(0,state)
+        self.blockSignals(False); self.sync_master()
+    def checked_paths(self): return [self.item(i).data(0,Qt.UserRole) for i in range(self.count()) if self.item(i).checkState(0)==Qt.Checked]
+
+class QuickPopup(QWidget):
+    chosen=Signal(str); visibility=Signal(bool)
+    def __init__(self):
+        super().__init__(None,Qt.Tool|Qt.FramelessWindowHint|Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_TranslucentBackground); self.setFixedSize(350,264)
+        self.setStyleSheet('QuickPopup {background:transparent;} QPushButton {background:rgba(255,255,255,225);color:#26354A;border:1px solid rgba(218,228,242,230);border-radius:12px;padding:0;} QPushButton:hover {background:rgba(239,246,255,245);border-color:#96C1F8;} QPushButton[selected="true"] {background:rgba(244,249,255,245);border:2px solid #2E83F2;} QLabel {background:transparent;border:0;color:#26354A;font-family:"Malgun Gothic","Noto Sans CJK KR",sans-serif;}')
+
+        self.actions={}; self.origin=0; self.origin_tab=0; self.monitor=QTimer(self); self.monitor.setInterval(25); self.monitor.timeout.connect(self.check_source)
+
+        grid=QGridLayout(self); grid.setContentsMargins(12,12,12,12); grid.setSpacing(8); self.buttons={}
+        for key,label,arrow,pos in [('pdf','PDF','↑',(0,1)),('png','PNG','←',(1,0)),('jpeg','JPEG','→',(1,2)),('more','확장 기능','↓',(2,1)),('hwpx','HWPX','',(1,1)),('xlsx','XLSX','',(1,1)),('compress','용량 축소','',(1,1))]:
+            button=QPushButton(); button.setAccessibleName(label); button.setCursor(Qt.PointingHandCursor);button.setFixedSize(110 if key=='more' else 100,74)
+            content=QVBoxLayout(button);content.setContentsMargins(6,5,6,6);content.setSpacing(1)
+            image=QLabel();image.setAttribute(Qt.WA_TransparentForMouseEvents);image.setAlignment(Qt.AlignCenter);image.setPixmap(icon('plus' if key=='more' else key).pixmap(30,32));content.addWidget(image)
+            text=QLabel(label);text.setAttribute(Qt.WA_TransparentForMouseEvents);text.setAlignment(Qt.AlignCenter);text.setStyleSheet('font-size:12px;font-weight:600;');content.addWidget(text)
+            if arrow:
+                indicator=QLabel(arrow,button);indicator.setAttribute(Qt.WA_TransparentForMouseEvents);indicator.setGeometry(button.width()-25,8,15,18);indicator.setStyleSheet('color:#60718A;font-size:14px;')
+            shadow=QGraphicsDropShadowEffect(button);shadow.setBlurRadius(12);shadow.setOffset(0,3);shadow.setColor(__import__('PySide6.QtGui',fromlist=['QColor']).QColor(20,43,76,28));button.setGraphicsEffect(shadow)
+            button.setProperty('selected',False);button.installEventFilter(self);button.clicked.connect(lambda checked=False,k=key:self.pick(k));grid.addWidget(button,*pos,Qt.AlignCenter);self.buttons[key]=button
+        self.note=QLabel('방향키 → Enter · Esc 닫기'); self.note.setAlignment(Qt.AlignCenter); self.note.hide()
+        self.current='pdf'; QApplication.instance().installEventFilter(self)
+    def clicked_at(self,point):
+        if not self.isVisible(): return
+        if sys.platform=='win32':
+            import win32gui
+            x,y=win32gui.ScreenToClient(int(self.winId()),tuple(point)); rect=win32gui.GetClientRect(int(self.winId()));w=max(1,rect[2]);h=max(1,rect[3])
+            position=QPoint(round(x*self.width()/w),round(y*self.height()/h))
+        else: position=self.mapFromGlobal(QPoint(*point))
+        if not any(b.isVisible() and b.geometry().contains(position) for b in self.buttons.values()): self.hide()
+    def check_source(self):
+        if sys.platform=='win32' and self.origin:
+            from windows import source_active, escape_pressed
+            if escape_pressed(): self.hide(); return
+            if not source_active(self.origin,self.origin_tab,int(self.winId())): self.hide()
+    def showEvent(self,event): super().showEvent(event); self.visibility.emit(True)
+    def hideEvent(self,event): self.monitor.stop(); self.visibility.emit(False); super().hideEvent(event)
+    def event(self,event):
+        if event.type()==QEvent.WindowDeactivate and self.isVisible():
+            if self.origin: self.check_source()
+            else: self.hide()
+        return super().event(event)
+    def present(self,paths,origin=0,tab=0):
+        self.origin=origin; self.origin_tab=tab
+        extensions={Path(p).suffix.lower() for p in paths}
+        images=bool(paths) and extensions <= IMAGES
+        pdfs=extensions=={'.pdf'}
+        self.actions={}
+        labels={'pdf':('PDF','pdf'),'png':('PNG','png'),'jpeg':('JPEG','jpeg')}
+        if images:
+            target='jpeg' if extensions=={'.png'} else 'png'
+            self.actions={'png':target,'jpeg':'hwpx'}
+            labels['png']=(target.upper(),target);labels['jpeg']=('한글','hwpx')
+        elif pdfs:
+            self.actions={'pdf':'pdf_merge','jpeg':'hwpx'}
+            labels['pdf']=('PDF 합치기','pdf');labels['jpeg']=('한글','hwpx')
+        for key,(label,asset) in labels.items():
+            button=self.buttons[key];button.setAccessibleName(label)
+            button.layout().itemAt(0).widget().setPixmap(icon(asset).pixmap(30,32))
+            button.layout().itemAt(1).widget().setText(label)
+        self.buttons['pdf'].setEnabled(True)
+        self.buttons['pdf'].setToolTip('PDF 파일을 두 개 이상 선택해 주세요.' if pdfs and len(paths)<2 else '')
+        self.buttons['hwpx'].setVisible(bool(paths) and all(Path(p).suffix.lower()=='.hwp' for p in paths))
+        self.buttons['xlsx'].setVisible(bool(paths) and all(Path(p).suffix.lower() in SPREADSHEETS- {'.xlsx'} for p in paths))
+        self.buttons['compress'].setVisible(bool(paths) and all(Path(p).suffix.lower() in IMAGES|{'.pdf'} for p in paths))
+        self.note.setText(f'{len(paths)}개 파일 · 방향키 → Enter · Esc 닫기')
+        self.current='pdf'; point=QCursor.pos(); screen=QApplication.screenAt(point) or QApplication.primaryScreen(); rect=screen.availableGeometry()
+        self.move(max(rect.left(),min(point.x()-self.width()//2,rect.right()-self.width()+1)),max(rect.top(),min(point.y()-self.height()//2,rect.bottom()-self.height()+1)))
+        self.show(); self.activateWindow(); self.select('pdf' if self.buttons['pdf'].isEnabled() else 'png'); self.monitor.start()
+    def select(self,key):
+        if key not in self.buttons or not self.buttons[key].isVisible() or not self.buttons[key].isEnabled(): return
+        self.current=key
+        for name,button in self.buttons.items():
+            button.setProperty('selected',name==key);button.style().unpolish(button);button.style().polish(button);button.update()
+        self.buttons[key].setFocus(Qt.OtherFocusReason)
+    def native_key(self,vk):
+        if not self.isVisible(): return
+        mapping={0x26:Qt.Key_Up,0x28:Qt.Key_Down,0x25:Qt.Key_Left,0x27:Qt.Key_Right,0x0D:Qt.Key_Return,0x1B:Qt.Key_Escape,0x09:Qt.Key_Tab,0x20:Qt.Key_Space}
+        key=mapping.get(vk)
+        if key is not None:self.handle_key(key)
+    def pick(self,key):
+        if not self.isVisible():return
+        self.hide(); self.chosen.emit(self.actions.get(key,key))
+    def eventFilter(self,obj,event):
+        if self.isVisible() and event.type()==QEvent.Enter:
+            key=next((k for k,b in self.buttons.items() if b is obj),None)
+            if key:self.select(key)
+        if self.isVisible() and event.type()==QEvent.MouseButtonPress:
+            point=self.mapFromGlobal(event.globalPosition().toPoint())
+            if not any(b.isVisible() and b.geometry().contains(point) for b in self.buttons.values()): self.hide()
+        if self.isVisible() and event.type()==QEvent.KeyPress and event.key() in (Qt.Key_Up,Qt.Key_Down,Qt.Key_Left,Qt.Key_Right,Qt.Key_Return,Qt.Key_Enter,Qt.Key_Escape,Qt.Key_Tab,Qt.Key_Space):
+            self.keyPressEvent(event); return True
+        return super().eventFilter(obj,event)
+    def move_selection(self,key):
+        center=next((name for name in ('hwpx','xlsx','compress') if self.buttons[name].isVisible()),None)
+        middle=center or 'pdf'
+        neighbors={
+            'pdf':{Qt.Key_Left:'png',Qt.Key_Right:'jpeg',Qt.Key_Down:center or 'more'},
+            'png':{Qt.Key_Up:'pdf',Qt.Key_Down:'more',Qt.Key_Right:center or 'jpeg'},
+            'jpeg':{Qt.Key_Up:'pdf',Qt.Key_Down:'more',Qt.Key_Left:center or 'png'},
+            'more':{Qt.Key_Up:middle,Qt.Key_Left:'png',Qt.Key_Right:'jpeg'},
+        }
+        if center:neighbors[center]={Qt.Key_Up:'pdf',Qt.Key_Down:'more',Qt.Key_Left:'png',Qt.Key_Right:'jpeg'}
+        target=neighbors.get(self.current,{}).get(key)
+        if target:self.select(target)
+    def handle_key(self,key):
+        if key in (Qt.Key_Up,Qt.Key_Down,Qt.Key_Left,Qt.Key_Right):self.move_selection(key)
+        elif key==Qt.Key_Tab:
+            visible=[k for k in ('pdf','png','hwpx','xlsx','compress','jpeg','more') if self.buttons[k].isVisible() and self.buttons[k].isEnabled()]
+            self.select(visible[(visible.index(self.current)+1)%len(visible)])
+        elif key in (Qt.Key_Return,Qt.Key_Enter,Qt.Key_Space):self.pick(self.current)
+        elif key==Qt.Key_Escape:self.hide()
+    def keyPressEvent(self,event):
+        self.handle_key(event.key());event.accept()
+
+class Window(QWidget):
+    def __init__(self):
+        super().__init__(); self.bus=Events(); self.busy=False;self.control=None;self.compression_rows=[];self.job_kind='convert'; self.settings=QSettings('Bakuri','FileConverter')
+        if not self.settings.value('settings_migrated',False,type=bool):
+            legacy=QSettings('Bakuri','Python Trial')
+            for key in legacy.allKeys():
+                if not self.settings.contains(key):self.settings.setValue(key,legacy.value(key))
+            self.settings.setValue('settings_migrated',True);self.settings.sync()
+        self.setWindowTitle(f'바꾸리 파일 변환기 {VERSION}'); self.resize(840,650); self.setMinimumSize(760,540); self.setObjectName('mainWindow');self.setStyleSheet(stylesheet())
+        layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0);layout.setSpacing(0)
+        toolbar=QFrame();self.toolbar=toolbar;toolbar.setObjectName('toolbar');row=QHBoxLayout(toolbar);row.setContentsMargins(16,16,16,14);row.setSpacing(10)
+        add=QPushButton('파일 추가');add.setObjectName('addFiles');add.setIcon(icon('plus'));add.clicked.connect(self.choose);row.addWidget(add)
+        sort=QPushButton('이름순 정렬');sort.setIcon(icon('sort'));sort.clicked.connect(lambda:self.files.sort_names());row.addWidget(sort)
+        remove=QPushButton('선택 제거');remove.setIcon(icon('delete'));remove.setToolTip('체크한 파일을 목록에서 제거합니다. 원본은 보존됩니다.');remove.clicked.connect(self.remove);row.addWidget(remove)
+        row.addStretch();self.count_label=QLabel('0 / 0개 선택');self.count_label.setObjectName('selectionCount');row.addWidget(self.count_label)
+        settings_button=QPushButton();settings_button.setObjectName('settings');settings_button.setIcon(icon('gear'));settings_button.setAccessibleName('설정');settings_button.setToolTip('설정');settings_button.clicked.connect(self.open_settings);row.addWidget(settings_button)
+        layout.addWidget(toolbar)
+        self.files=Files();self.files.changed.connect(self.refresh_count);layout.addWidget(self.files,1)
+        options=QFrame();options.setObjectName('options');row=QHBoxLayout(options);row.setContentsMargins(18,14,18,14);row.setSpacing(12)
+        row.addWidget(QLabel('출력 형식'))
+        self.fmt=QComboBox();self.fmt.setItemDelegate(OutputFormatDelegate(self.fmt));self.fmt.addItems(['PDF','PNG','JPEG','HWPX','DOCX','PPTX','XLSX','용량 축소']);self.fmt.setFixedWidth(150);self.fmt.setToolTip('XLSX 출력은 매크로를 저장하지 않습니다. 원본 파일은 보존됩니다.');row.addWidget(self.fmt);self.compression_profile=QComboBox();add_profiles(self.compression_profile);self.compression_profile.setMinimumWidth(140);self.compression_profile.setMaximumWidth(260);self.compression_profile.setCurrentIndex(self.compression_profile.findData(read_options(self.settings)['profile']));self.compression_profile.hide();row.addWidget(self.compression_profile);row.addStretch()
+        self.individual=QPushButton('각각 저장');self.individual.setObjectName('separate');self.individual.setCheckable(True);self.individual.setChecked(True)
+        self.merge=QPushButton('하나로 합치기');self.merge.setObjectName('merge');self.merge.setCheckable(True)
+        self.save_mode=QButtonGroup(self);self.save_mode.setExclusive(True);self.save_mode.addButton(self.individual);self.save_mode.addButton(self.merge)
+        segment=QHBoxLayout();segment.setSpacing(0);segment.addWidget(self.individual);segment.addWidget(self.merge);row.addLayout(segment)
+        self.fmt.currentTextChanged.connect(self.output_changed);layout.addWidget(options)
+        footer=QFrame();footer.setObjectName('footer');row=QHBoxLayout(footer);row.setContentsMargins(18,12,18,14);row.setSpacing(12)
+        folder=QLabel();folder.setPixmap(icon('folder').pixmap(20,20));row.addWidget(folder)
+        self.output_folders=[];self.notification_folders=[]
+        self.status=QLabel('원본 폴더에 새 파일로 저장');self.status.setObjectName('status');self.status.setWordWrap(True);self.status.linkActivated.connect(self.status_link);row.addWidget(self.status,1)
+        self.run=QPushButton('변환 시작  →');self.run.setObjectName('convert');self.run.setMinimumWidth(184);self.run.clicked.connect(self.start);row.addWidget(self.run);layout.addWidget(footer)
+        app_icon=icon('app');self.setWindowIcon(app_icon)
+        self.tray=QSystemTrayIcon(icon('tray'),self); menu=QMenu()
+        menu.addAction('열기',lambda:self.open_main('direct')); menu.addAction('설정',self.open_settings); menu.addAction('단축키 다시 연결',self.reconnect_hotkey); menu.addSeparator(); menu.addAction('완전 종료',self.quit); self.tray.setContextMenu(menu)
+        self.tray.messageClicked.connect(lambda:self.open_folders(self.notification_folders))
+        self.tray.activated.connect(lambda reason:self.open_main('direct') if reason==QSystemTrayIcon.Trigger else None); self.tray.show()
+        from updater import UpdateController
+        self.updater=UpdateController(self,self.settings)
+        self.popup=QuickPopup(); self.bus.clicked.connect(self.popup.clicked_at); self.bus.dismiss.connect(self.popup.hide);self.bus.popup_key.connect(self.popup.native_key); self.popup.chosen.connect(self.quick_selected); self.quick_paths=[]
+        self.progress_popup=ProgressPopup();self.progress_popup.stop_requested.connect(self.request_stop);self.bus.progress.connect(self.update_progress)
+        self.bus.message.connect(self.status.setText); self.bus.error.connect(self.failed); self.bus.done.connect(self.finished); self.bus.selected.connect(self.receive)
+        if sys.platform=='win32' and os.environ.get('BAKURI_DISABLE_SHELL_INTEGRATION')!='1':
+            from windows import SelectionWatcher,MouseWatcher,register_menu,migrate_menu,startup_enabled,set_startup
+            try:
+                if startup_enabled():set_startup(True)
+                if migrate_menu(self.settings.value('explorer',True,type=bool)):
+                    self.settings.setValue('explorer',True);self.settings.sync()
+            except Exception as exc:self.status.setText('탐색기 메뉴 등록 실패: '+str(exc))
+            self.watcher=SelectionWatcher(self.bus.selected.emit,self.bus.message.emit,self.settings,self.bus.dismiss.emit,self.bus.popup_key.emit)
+            self.popup.visibility.connect(self.popup_visibility);self.watcher.start()
+            self.mouse_watcher=MouseWatcher(self.bus.clicked.emit); self.mouse_watcher.start()
+    def popup_visibility(self,visible):
+        self.watcher.popup_windows=(self.popup.origin,int(self.popup.winId()))
+        self.watcher.popup_open=visible
+    def refresh_count(self):
+        self.count_label.setText(f'{len(self.files.checked_paths())} / {self.files.count()}개 선택');self.refresh_formats()
+    def refresh_formats(self):
+        paths=self.files.checked_paths()
+        model=self.fmt.model()
+        for index in range(self.fmt.count()):
+            name=self.fmt.itemText(index)
+            allowed=not paths or all(Path(p).suffix.lower() in IMAGES|{'.pdf'} for p in paths) if name=='용량 축소' else not paths or all(can_convert(p,name) for p in paths)
+            item=model.item(index);item.setEnabled(allowed)
+            item.setForeground(QBrush(QColor('#26354A' if allowed else '#A4AFBD')))
+            item.setToolTip('' if allowed else '선택한 파일 중 이 형식으로 변환할 수 없는 파일이 있습니다.')
+        current=self.fmt.currentIndex()
+        if current<0 or not model.item(current).isEnabled():
+            self.fmt.setCurrentIndex(next((i for i in range(self.fmt.count()) if model.item(i).isEnabled()),-1))
+        self.output_changed(self.fmt.currentText())
+    def output_changed(self,format):
+        paths=self.files.checked_paths()
+        allowed=format in {'PDF','PPTX'} or format=='HWPX' and bool(paths) and all(Path(p).suffix.lower() in IMAGES|{'.pdf'} for p in paths)
+        self.merge.setEnabled(allowed and not self.busy)
+        self.compression_profile.setVisible(format=='용량 축소')
+        if not self.busy:self.run.setText('용량 축소 시작' if format=='용량 축소' else '변환 시작  →')
+        if not allowed:self.individual.setChecked(True)
+    def open_main(self,reason='expanded'):
+        self.show();self.raise_();self.activateWindow()
+        if hasattr(self,'updater'):self.updater.request(reason)
+    def reconnect_hotkey(self):
+        if hasattr(self,'watcher'): self.watcher.request_restart(); self.status.setText('단축키를 다시 연결합니다.')
+    def open_settings(self):
+        if self.busy:return
+        SettingsDialog(self).exec();self.compression_profile.setCurrentIndex(self.compression_profile.findData(read_options(self.settings)['profile']))
+    def receive(self,selection):
+        if self.busy or (hasattr(self,'updater') and self.updater.installing): return
+        paths,origin,tab=selection
+        if sys.platform=='win32':
+            import win32gui
+            if win32gui.GetForegroundWindow()!=origin: return
+        self.quick_paths=[str(p) for p in paths if Path(p).is_file() and Path(p).suffix.lower() in SUPPORTED]
+        if not self.quick_paths:
+            self.tray.showMessage('바꾸리','지원하는 파일을 선택해 주세요.'); return
+        self.popup.present(self.quick_paths,origin,tab)
+    def quick_selected(self,key):
+        if self.busy or (hasattr(self,'updater') and self.updater.installing): return
+        if key=='more':
+            self.files.clear(); self.files.add_paths(self.quick_paths); self.open_main('expanded')
+        elif key=='pdf_merge':
+            if len(self.quick_paths)<2:
+                QMessageBox.information(self,'PDF 합치기','PDF 파일을 두 개 이상 선택해 주세요.');return
+            self.start_conversion(self.quick_paths,'pdf',True,self.popup.geometry().center())
+        elif key=='compress':self.start_compression(self.quick_paths,self.popup.geometry().center())
+        else:
+            merge=len(self.quick_paths)>1 and key in {'pdf','hwpx'} and all(Path(p).suffix.lower() in IMAGES|{'.pdf'} for p in self.quick_paths)
+            self.start_conversion(self.quick_paths,key,merge,self.popup.geometry().center())
+
+    def choose(self):
+        if self.busy:return
+        self.files.add_paths(QFileDialog.getOpenFileNames(self,'파일 선택','','지원 파일 ('+' '.join('*'+ext for ext in sorted(SUPPORTED))+')')[0])
+    def remove(self):
+        for i in range(self.files.count()-1,-1,-1):
+            if self.files.item(i).checkState(0)==Qt.Checked: self.files.takeItem(i)
+    def start(self):
+        if self.busy:self.request_stop();return
+        paths=self.files.checked_paths()
+        if not paths:
+            QMessageBox.information(self,'파일 선택','변환할 파일의 체크박스를 선택해 주세요.'); return
+        if self.fmt.currentText()=='용량 축소':
+            self.settings.setValue('compress_profile',self.compression_profile.currentData());self.start_compression(paths);return
+        if self.fmt.currentIndex()<0 or not self.fmt.model().item(self.fmt.currentIndex()).isEnabled():return
+        fmt=self.fmt.currentText().lower(); merge=self.merge.isChecked() and self.merge.isEnabled()
+        self.start_conversion(paths,fmt,merge)
+    def start_conversion(self,paths,fmt,merge,anchor=None):
+        if self.busy:return
+        if any(not can_convert(p,fmt) for p in paths):
+            QMessageBox.information(self,'출력 형식 확인','HWPX: HWP·ODT·Word·이미지·PDF / DOCX: 한글 / PPTX: 이미지·PDF / XLSX: 스프레드시트 입력을 선택해 주세요.');return
+        dpi=self.settings.value('dpi',150,type=int);image_mode=self.settings.value('image_mode','background')
+        self.begin_job(lambda control:convert(paths,fmt,merge,dpi=dpi,image_mode=image_mode,control=control),'convert',anchor)
+    def start_compression(self,paths,anchor=None):
+        if self.busy:return
+        if any(Path(path).suffix.lower() not in IMAGES|{'.pdf'} for path in paths):
+            QMessageBox.information(self,'파일 확인','용량 축소는 이미지와 PDF만 지원합니다.');return
+        if anchor is not None and not self.settings.value('compress_direct',False,type=bool):
+            dialog=CompressionDialog(self.settings,self)
+            if dialog.exec()!=QDialog.Accepted:return
+        options=read_options(self.settings);self.compression_profile.setCurrentIndex(self.compression_profile.findData(options['profile']))
+        self.begin_job(lambda control:compress(paths,control=control,**options),'compress',anchor)
+    def begin_job(self,operation,kind,anchor=None):
+        if self.busy or self.updater.installing:return
+        self.popup.hide();self.progress_popup.hide();self.busy=True;self.job_kind=kind;self.control=JobControl(self.bus.progress.emit);control=self.control
+        self.compression_rows=[];self.output_folders=[];self.notification_folders=[]
+        self.run.setText('작업 중지');self.run.setEnabled(True);self.files.setEnabled(False);self.toolbar.setEnabled(False);self.fmt.setEnabled(False);self.compression_profile.setEnabled(False);self.individual.setEnabled(False);self.merge.setEnabled(False)
+        self.status.setText('0% · 작업 준비')
+        if anchor is not None:self.progress_popup.present(anchor)
+        def work():
+            outcome='done';error=''
+            try:operation(control)
+            except Cancelled:outcome='cancelled'
+            except Exception as exc:outcome='failed';error=str(exc)
+            self.bus.done.emit(dict(paths=list(control.outputs),rows=list(control.rows),outcome=outcome,error=error,kind=kind))
+        self.worker=threading.Thread(target=work,daemon=True);self.worker.start()
+    def update_progress(self,percent,text):
+        if not self.busy:return
+        if self.control and self.control.cancelled.is_set():return
+        self.progress_popup.update_percent(percent);self.status.setText(f'{percent}% · {text}')
+    def request_stop(self):
+        if not self.busy or self.control is None:return
+        self.control.cancel();self.run.setText('중지 요청 중');self.run.setEnabled(False);self.progress_popup.stopping();self.status.setText('중지 요청 중 · 현재 처리 단계가 반환되면 중지합니다.')
+    def reset(self):
+        self.busy=False;self.control=None;self.run.setEnabled(True);self.files.setEnabled(True);self.toolbar.setEnabled(True);self.fmt.setEnabled(True);self.compression_profile.setEnabled(True);self.individual.setEnabled(True);self.output_changed(self.fmt.currentText());self.progress_popup.hide()
+    def failed(self,text):
+        self.reset();self.status.setText('실패: '+text);self.show();QMessageBox.warning(self,'변환 실패',text+'\n일부 개별 파일은 이미 저장되었을 수 있습니다.')
+    def finished(self,result):
+        if isinstance(result,list):result=dict(paths=result,rows=[],outcome='done',error='',kind='convert')
+        paths=result['paths'];outcome=result['outcome'];was_popup=self.progress_popup.isVisible();self.reset();self.compression_rows=result.get('rows',[])
+        if was_popup and outcome=='done':
+            self.progress_popup.update_percent(100);self.progress_popup.stop.setEnabled(False);self.progress_popup.show();QTimer.singleShot(650,lambda:self.progress_popup.hide() if not self.busy else None)
+        self.output_folders=list(dict.fromkeys(str(Path(p).parent) for p in paths));self.notification_folders=self.output_folders[:]
+        saved=f'{len(paths)}개 저장 완료'
+        summary='작업 중지 · '+saved if outcome=='cancelled' else '작업 실패 · '+saved if outcome=='failed' else saved
+        if result.get('kind')=='compress':
+            skipped=sum(row['status'] in ('건너뜀','축소 효과 없음') for row in self.compression_rows);failed=sum(row['status']=='실패' for row in self.compression_rows)
+            summary+=f' · 건너뜀 {skipped}개 · 실패 {failed}개'
+        links=[]
+        if paths:links.append('<a style="color:#2E83F2;text-decoration:none" href="open">저장 폴더 열기</a>')
+        if self.compression_rows:links.append('<a style="color:#2E83F2;text-decoration:none" href="details">상세 결과</a>')
+        self.status.setText(summary+(' · '+' · '.join(links) if links else ''))
+        if self.settings.value('notify',True,type=bool):self.tray.showMessage('바꾸리 파일 변환기',summary+(' · 클릭하면 저장 폴더를 엽니다.' if paths else ''))
+        if outcome=='failed':self.show();QMessageBox.warning(self,'작업 실패',result.get('error','')+'\n이미 저장된 결과와 원본은 보존됩니다.')
+    def status_link(self,link):
+        if link=='details':CompressionResults(self.compression_rows,self).exec()
+        else:self.open_folders(self.output_folders)
+    def open_folders(self,folders):
+        if not folders: return
+        def show(folder):
+            if not Path(folder).is_dir(): QMessageBox.warning(self,'폴더 열기','저장 폴더가 이동되거나 삭제되었습니다.'); return
+            QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
+        if len(folders)==1: show(folders[0]); return
+        menu=QMenu(self)
+        for folder in folders: menu.addAction(folder,lambda folder=folder:show(folder))
+        menu.exec(QCursor.pos())
+    def quit(self):
+        if self.busy: QMessageBox.information(self,'변환 중','변환이 끝난 뒤 종료해 주세요.'); return
+        QApplication.quit()
+    def closeEvent(self,e):
+        if self.tray.isSystemTrayAvailable(): self.hide(); e.ignore()
+        elif self.busy: e.ignore()
+        else: e.accept()
+
+if __name__=='__main__':
+    app=QApplication(sys.argv); app.setQuitOnLastWindowClosed(False)
+    from PySide6.QtNetwork import QLocalSocket, QLocalServer
+    socket=QLocalSocket(); socket.connectToServer('BakuriPythonTrial')
+    paths=sys.argv[sys.argv.index('--add-files')+1:] if '--add-files' in sys.argv else []
+    if socket.waitForConnected(300):
+        socket.write(json.dumps({'paths':paths,'direct':'--background' not in sys.argv and '--add-files' not in sys.argv}).encode()+b'\n'); socket.waitForBytesWritten(1000); socket.disconnectFromServer(); sys.exit(0)
+    QLocalServer.removeServer('BakuriPythonTrial'); server=QLocalServer()
+    if not server.listen('BakuriPythonTrial'): raise RuntimeError('다른 바꾸리가 실행 중입니다.')
+    win=Window(); clients=[]
+    def accept():
+        while server.hasPendingConnections():
+            client=server.nextPendingConnection(); clients.append(client); client.buffer=b''
+            def read(client=client):
+                client.buffer+=bytes(client.readAll())
+                if b'\n' in client.buffer:
+                    try:
+                        payload=json.loads(client.buffer.split(b'\n',1)[0]);direct=isinstance(payload,dict) and payload.get('direct',False)
+                        received=payload.get('paths',[]) if isinstance(payload,dict) else payload
+                        if received:win.files.add_paths(received)
+                        if direct:win.open_main('direct')
+                        elif received:win.show();win.raise_();win.activateWindow()
+                    except (ValueError,TypeError): pass
+                    client.disconnectFromServer()
+            client.readyRead.connect(read); read()
+    server.newConnection.connect(accept)
+    if paths: win.files.add_paths(paths)
+    if '--background' not in sys.argv:
+        win.show()
+        if '--add-files' not in sys.argv:QTimer.singleShot(0,lambda:win.updater.request('direct'))
+    sys.exit(app.exec())

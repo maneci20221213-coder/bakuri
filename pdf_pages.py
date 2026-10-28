@@ -1,18 +1,52 @@
-"""Split an embedded one-column image table into per-page HWPX sections."""
+"""Turn staged pictures into borderless, original-size PDF pages in HWPX."""
 import copy,zipfile,xml.etree.ElementTree as ET
-from hancom_images import unit
 HP='http://www.hancom.co.kr/hwpml/2011/paragraph'
 HS='http://www.hancom.co.kr/hwpml/2011/section'
 OPF='http://www.idpf.org/2007/opf/'
 def q(ns,name):return '{'+ns+'}'+name
 def fit_page(width,height):
-    landscape=width>height
-    available=(277,190) if landscape else (190,277)
-    scale=min(available[0]/width,available[1]/height)
-    # Leave 1 mm for table border/paragraph rounding at the page edge.
-    scale=min((available[0]-1)/width,(available[1]-1)/height)
-    return landscape,unit(width*scale),unit(height*scale)
-def paginate(path,entries):
+    # Raster callers without PDF geometry use the converter's 150 DPI.
+    return width>height,round(width*48),round(height*48)
+
+def full_page_picture(picture,width,height):
+    """Keep the original image coordinates; scale its object to paper bounds."""
+    # A normal selectable picture in front of text avoids reserving a full
+    # page plus an anchor line (which can create a trailing blank page).
+    picture.set('textWrap','IN_FRONT_OF_TEXT')
+    picture.set('textFlow','BOTH_SIDES')
+    size=picture.find(q(HP,'sz'))
+    if size is None:size=ET.SubElement(picture,q(HP,'sz'))
+    size.attrib.update(width=str(width),height=str(height),widthRelTo='ABSOLUTE',heightRelTo='ABSOLUTE',protect='0')
+    pos=picture.find(q(HP,'pos'))
+    if pos is None:pos=ET.SubElement(picture,q(HP,'pos'))
+    pos.attrib.update(treatAsChar='0',affectLSpacing='0',flowWithText='0',allowOverlap='1',holdAnchorAndSO='1',vertRelTo='PAPER',horzRelTo='PAPER',vertAlign='TOP',horzAlign='LEFT',vertOffset='0',horzOffset='0')
+    for name in ('outMargin','inMargin'):
+        margin=picture.find(q(HP,name))
+        if margin is not None:margin.attrib.update(left='0',right='0',top='0',bottom='0')
+    current=picture.find(q(HP,'curSz'))
+    if current is not None:current.attrib.update(width=str(width),height=str(height))
+    offset=picture.find(q(HP,'offset'))
+    if offset is not None:offset.attrib.update(x='0',y='0')
+    original=picture.find(q(HP,'orgSz'))
+    if original is not None:
+        ow=int(original.get('width','0'));oh=int(original.get('height','0'))
+        if ow<=0 or oh<=0:raise RuntimeError('PDF 그림의 원래 크기가 올바르지 않습니다.')
+        rendering=picture.find(q(HP,'renderingInfo'))
+        if rendering is not None:
+            for matrix in rendering:
+                kind=matrix.tag.rsplit('}',1)[-1]
+                if kind in {'transMatrix','scaMatrix','rotMatrix'}:
+                    sx,sy=(width/ow,height/oh) if kind=='scaMatrix' else (1,1)
+                    matrix.attrib.update(e1=str(sx),e2='0',e3='0',e4='0',e5=str(sy),e6='0')
+    rotation=picture.find(q(HP,'rotationInfo'))
+    if rotation is not None:rotation.set('angle','0')
+    line=picture.find(q(HP,'lineShape'))
+    if line is not None:line.attrib.update(style='NONE',width='0')
+
+def paginate(path,entries,sizes=None):
+    sizes=sizes if sizes is not None else [fit_page(w,h)[1:] for _,w,h in entries]
+    if len(sizes)!=len(entries) or any(w<=0 or h<=0 for w,h in sizes):
+        raise RuntimeError('PDF 페이지 크기 정보가 올바르지 않습니다.')
     with zipfile.ZipFile(path) as z:files={n:z.read(n) for n in z.namelist()}
     names=[n for n in files if n.startswith('Contents/section') and n.endswith('.xml')]
     if len(names)!=1:raise RuntimeError('PDF 페이지 배치용 기본 구역이 올바르지 않습니다.')
@@ -35,25 +69,33 @@ def paginate(path,entries):
     for item in list(spine):
         if item.get('idref') in oldids:spine.remove(item)
     for name in names:del files[name]
-    for index,(_,w,h) in enumerate(entries):
+    for index,(width,height) in enumerate(sizes):
         section=copy.deepcopy(base);table=next(section.iter(q(HP,'tbl')))
-        for row in list(table.findall(q(HP,'tr'))):table.remove(row)
-        row=copy.deepcopy(rows[index]);table.append(row);table.set('rowCnt','1');table.set('id',str(100000+index))
-        landscape,width,height=fit_page(w,h)
+        pictures=list(rows[index].iter(q(HP,'pic')))
+        if len(pictures)!=1:raise RuntimeError('PDF 페이지에 넣을 그림을 찾지 못했습니다.')
+        picture=copy.deepcopy(pictures[0]);picture.set('id',str(100000+index))
+        full_page_picture(picture,width,height)
+        parents={child:parent for parent in section.iter() for child in parent}
+        parent=parents[table];position=list(parent).index(table)
+        parent.remove(table);parent.insert(position,picture)
+        # Keep only the section anchor paragraph, discarding the staging table's
+        # trailing paragraphs and cached line positions from the A4 template.
+        anchor=parent
+        while anchor in parents and parents[anchor] is not section:anchor=parents[anchor]
+        for child in list(section):
+            if child is not anchor:section.remove(child)
+        for node in section.iter():
+            for child in list(node):
+                if child.tag==q(HP,'linesegarray'):node.remove(child)
         page=next(section.iter(q(HP,'pagePr')))
-        page.set('width',str(unit(210)));page.set('height',str(unit(297)))
-        page.set('landscape','WIDELY' if landscape else 'NARROWLY')
+        # Hancom stores portrait paper dimensions separately from orientation.
+        # Its serialized enum is WIDELY=portrait, NARROWLY=landscape.
+        # https://forum.developer.hancom.com/t/pagepr-width-height/1693
+        page.set('width',str(min(width,height)));page.set('height',str(max(width,height)))
+        page.set('landscape','NARROWLY' if width>height else 'WIDELY')
         margin=page.find(q(HP,'margin'))
-        if margin is not None:
-            for key in ('left','right','top','bottom'):margin.set(key,str(unit(10)))
-            for key in ('header','footer','gutter'):margin.set(key,'0')
-        for cell in row.iter(q(HP,'cellAddr')):cell.set('rowAddr','0')
-        for size in list(table.findall(q(HP,'sz')))+list(row.iter(q(HP,'cellSz'))):
-            size.set('width',str(width));size.set('height',str(height))
-        # Inline pictures also need the new cell's dimensions.
-        for pic in row.iter(q(HP,'pic')):
-            size=pic.find(q(HP,'sz'))
-            if size is not None:size.set('width',str(width));size.set('height',str(height))
+        if margin is None:margin=ET.SubElement(page,q(HP,'margin'))
+        for key in ('left','right','top','bottom','header','footer','gutter'):margin.set(key,'0')
         section.set('id',str(index))
         name=f'Contents/section{index}.xml';files[name]=ET.tostring(section,encoding='utf-8',xml_declaration=True)
         ET.SubElement(manifest,q(opf,'item'),{'id':f'section{index}','href':name,'media-type':'application/xml'})

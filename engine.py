@@ -1,7 +1,7 @@
 from pathlib import Path
 import tempfile, shutil, csv, codecs, io
 from PIL import Image, ImageOps
-from image_inputs import IMAGES, frames, white_rgb, stage_images
+from image_inputs import IMAGES, frames, white_rgb, stage_images, save_png, page_sizes
 import fitz
 from jobs import JobControl
 
@@ -54,11 +54,12 @@ class OfficeSession:
         from hancom_images import create_document, compact_document
         entries=stage_images(paths,folder,progress,checkpoint=self.check,advance=lambda fraction:self.advance(.35*fraction,'이미지 준비'))
         self.check()
-        create_document(self.hwp(),entries,dest,mode,progress,checkpoint=self.check,advance=lambda fraction:self.advance(.35+.6*fraction,'한글 표 채우기'))
-        if any(Path(p).suffix.lower()=='.pdf' for p in paths):
+        pdf_pages=any(Path(p).suffix.lower()=='.pdf' for p in paths)
+        create_document(self.hwp(),entries,dest,'inline' if pdf_pages else mode,progress,checkpoint=self.check,advance=lambda fraction:self.advance(.35+.6*fraction,'한글 그림 넣기'))
+        if pdf_pages:
             self.check()
             from pdf_pages import paginate
-            paginate(dest,entries)
+            paginate(dest,entries,page_sizes(paths))
             self.check()
         compact_document(dest,self.check)
     def powerpoint(self):
@@ -89,7 +90,7 @@ class OfficeSession:
                 else:
                     for image in frames(source):
                         self.check()
-                        path=folder/f'slide-{count}.png';image.save(path,'PNG')
+                        path=folder/f'slide-{count}.png';save_png(image,path,source)
                         self.add_slide(book,path,image.width,image.height,count)
                         count+=1
             self.check()
@@ -178,10 +179,11 @@ def to_pdf(src,dest,session=None,control=None,advance=lambda f:None):
                     with Image.open(src) as original:original_jpeg=original.getexif().get(274,1)==1
                 if original_jpeg:page.insert_image(page.rect,filename=str(src))
                 else:
-                    data=io.BytesIO();image.save(data,'PNG',compress_level=1);page.insert_image(page.rect,stream=data.getvalue())
+                    if image.getchannel('A').getextrema()==(255,255):image=image.convert('RGB')
+                    data=io.BytesIO();image.save(data,'PNG',optimize=True);page.insert_image(page.rect,stream=data.getvalue())
                 advance(.25+.5*(index+1)/(index+2))
             if control:control.check()
-            document.save(dest)
+            document.save(dest,garbage=4,deflate=True,deflate_images=True)
     else: (session.export if session else office)(src,dest,'PDF')
 
 def convert(files,fmt,merge=False,progress=lambda s:None,dpi=150,image_mode='background',control=None):
@@ -223,7 +225,9 @@ def convert(files,fmt,merge=False,progress=lambda s:None,dpi=150,image_mode='bac
                     for number,image in enumerate(frames(src)):
                         advance(.1+.7*number/pages)
                         if fmt=='jpeg':image=white_rgb(image)
-                        image.save(temp,quality=95);control.check()
+                        if fmt=='png':save_png(image,temp,src)
+                        else:image.save(temp,'JPEG',quality=95,optimize=True)
+                        control.check()
                         name=f'{src.stem}.{fmt}' if pages==1 else f'{src.stem}_{number+1:03}.{fmt}'
                         results.append(control.publish(temp,src.with_name(name)));advance(.1+.8*(number+1)/pages)
                     continue
@@ -254,7 +258,7 @@ def convert(files,fmt,merge=False,progress=lambda s:None,dpi=150,image_mode='bac
                         with fitz.open(pdf) as part:
                             if part.needs_pass:raise ValueError('암호가 있는 PDF는 지원하지 않습니다.')
                             control.check();document.insert_pdf(part);control.check()
-                    control.check();document.save(merged);control.check()
+                    control.check();document.save(merged,garbage=4,deflate=True,deflate_images=True);control.check()
                 results.append(control.publish(merged,files[0].with_suffix('.pdf') if len(files)==1 else files[0].parent/'합친문서.pdf'))
         control.update(99,'저장 확인')
     control.complete();return results

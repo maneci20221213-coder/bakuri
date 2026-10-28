@@ -6,7 +6,7 @@ class PdfPageTests(unittest.TestCase):
  def test_mixed_orientation_and_ratio(self):
   with tempfile.TemporaryDirectory() as d:
    p=Path(d)/'x.hwpx'
-   section=f'<section xmlns:hp="{HP}"><hp:p><hp:run><hp:secPr><hp:pagePr><hp:margin/></hp:pagePr></hp:secPr><hp:tbl rowCnt="2"><hp:sz/><hp:tr><hp:tc><hp:cellAddr rowAddr="0"/><hp:cellSz/></hp:tc></hp:tr><hp:tr><hp:tc><hp:cellAddr rowAddr="1"/><hp:cellSz/></hp:tc></hp:tr></hp:tbl></hp:run></hp:p></section>'
+   section=f'<section xmlns:hp="{HP}"><hp:p><hp:run><hp:secPr><hp:pagePr><hp:margin/></hp:pagePr></hp:secPr><hp:tbl rowCnt="2"><hp:sz/><hp:tr><hp:tc><hp:cellAddr rowAddr="0"/><hp:cellSz/><hp:pic><hp:sz/></hp:pic></hp:tc></hp:tr><hp:tr><hp:tc><hp:cellAddr rowAddr="1"/><hp:cellSz/><hp:pic><hp:sz/></hp:pic></hp:tc></hp:tr></hp:tbl></hp:run></hp:p></section>'
    content=f'<package xmlns="{OPF}"><manifest><item id="section0" href="Contents/section0.xml"/></manifest><spine><itemref idref="section0"/></spine></package>'
    with zipfile.ZipFile(p,'w') as z:
     z.writestr('Contents/section0.xml',section);z.writestr('Contents/content.hpf',content);z.writestr('Contents/header.xml','<head secCnt="1"/>');z.writestr('BinData/image.png',b'image')
@@ -15,10 +15,12 @@ class PdfPageTests(unittest.TestCase):
     for i,(w,h) in enumerate([(100,200),(300,100)]):
      section=E.fromstring(z.read(f'Contents/section{i}.xml'))
      page=next(section.iter(q(HP,'pagePr')))
-     self.assertEqual(page.get('landscape'),'WIDELY' if w>h else 'NARROWLY')
-     size=next(section.iter(q(HP,'cellSz')))
+     self.assertEqual(page.get('landscape'),'NARROWLY' if w>h else 'WIDELY')
+     size=next(section.iter(q(HP,'sz')))
      self.assertAlmostEqual(int(size.get('width'))/int(size.get('height')),w/h,places=3)
-     self.assertEqual(len(list(section.iter(q(HP,'tr')))),1)
+     self.assertEqual(len(list(section.iter(q(HP,'tbl')))),0)
+     self.assertEqual(int(size.get('width')),w*48);self.assertEqual(int(size.get('height')),h*48)
+     self.assertTrue(all(int(v)==0 for v in page.find(q(HP,'margin')).attrib.values()))
     self.assertEqual(E.fromstring(z.read('Contents/header.xml')).get('secCnt'),'2')
     spine=E.fromstring(z.read('Contents/content.hpf')).find(q(OPF,'spine'))
     self.assertEqual([item.get('idref') for item in spine],['section0','section1'])
@@ -73,12 +75,9 @@ class HancomPackagingRegressionTests(unittest.TestCase):
   from test_images import Hancom
   class SavedByHancom(Hancom):
    def SaveAs(self,path,fmt,options):
-    super().SaveAs(path,fmt,options)
+    realistic_package(Path(path),self.pictures)
     with zipfile.ZipFile(path) as z:files={n:z.read(n) for n in z.namelist()}
-    section=E.fromstring(files['Contents/section0.xml'])
-    page=E.SubElement(section,q(HP,'pagePr'));E.SubElement(page,q(HP,'margin'))
-    files['Contents/section0.xml']=E.tostring(section)
-    files['Contents/content.hpf']=(f'<opf:package xmlns:opf="{HANCOM_OPF}"><opf:manifest><opf:item id="section0" href="Contents/section0.xml"/></opf:manifest><opf:spine><opf:itemref idref="section0"/></opf:spine></opf:package>').encode()
+    for i,picture in enumerate(self.pictures):files[f'BinData/image{i}.png']=picture[2]
     with zipfile.ZipFile(path,'w') as z:
      for n,data in files.items():z.writestr(n,data)
     return True
@@ -91,6 +90,10 @@ class HancomPackagingRegressionTests(unittest.TestCase):
    self.assertEqual(pdf.read_bytes(),original)
    with zipfile.ZipFile(dest) as z:
     self.assertEqual([n for n in z.namelist() if n.startswith('Contents/section')],['Contents/section0.xml','Contents/section1.xml'])
-    for i,direction in enumerate(['NARROWLY','WIDELY']):
+    for i,direction in enumerate(['WIDELY','NARROWLY']):
      section=E.fromstring(z.read(f'Contents/section{i}.xml'))
      self.assertEqual(next(section.iter(q(HP,'pagePr'))).get('landscape'),direction)
+     self.assertFalse(list(section.iter(q(HP,'tbl'))))
+     size=next(section.iter(q(HP,'pic'))).find(q(HP,'sz'))
+     self.assertEqual((int(size.get('width')),int(size.get('height'))),[(30000,60000),(80000,40000)][i])
+   self.assertTrue(all(picture[1]=='inline' for picture in app.pictures))

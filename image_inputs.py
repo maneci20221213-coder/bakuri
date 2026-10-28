@@ -19,6 +19,31 @@ def white_rgb(image):
     result.paste(image,mask=image.getchannel('A'))
     return result
 
+def save_png(image,target,original=None):
+    """Lossless PNG output: avoid an unnecessary opaque alpha channel."""
+    if image.mode=='RGBA' and image.getchannel('A').getextrema()==(255,255):
+        image=image.convert('RGB')
+    image.save(target,'PNG',optimize=True,compress_level=9)
+    if original is not None:
+        with Image.open(original) as source:
+            reusable=(source.format=='PNG' and source.getexif().get(274,1)==1
+                      and getattr(source,'n_frames',1)==1)
+        if reusable and Path(original).stat().st_size<Path(target).stat().st_size:
+            shutil.copyfile(original,target)
+
+def page_sizes(paths):
+    """Displayed PDF crop-box dimensions, including rotation, in HWPUNIT."""
+    import fitz
+    sizes=[]
+    for path in paths:
+        if Path(path).suffix.lower()=='.pdf':
+            with fitz.open(path) as document:
+                if document.needs_pass:raise ValueError('암호가 있는 PDF는 지원하지 않습니다.')
+                sizes.extend((round(page.rect.width*100),round(page.rect.height*100)) for page in document)
+        else:
+            sizes.extend((round(image.width*48),round(image.height*48)) for image in frames(path))
+    return sizes
+
 def stage_images(paths,folder,progress=lambda text:None,checkpoint=lambda:None,advance=lambda fraction:None):
     """Reuse compatible JPEG/PNG bytes; normalize only when required, in input order."""
     folder=Path(folder); entries=[]

@@ -27,12 +27,9 @@ try {
    Write-Host "Process exited: $($Child.HasExited); Desktop: $Desktop"
    throw "Desktop shortcut choice $Choice was not applied." }
   if ($Expected) {
-   $Shell=New-Object -ComObject WScript.Shell
-   $Target=$Shell.CreateShortcut($Link).TargetPath
-   Write-Host "Shortcut target: $Target; installation: $Destination"
-   # Windows may return a long path while TEMP used an 8.3 alias. Compare files,
-   # not directory strings, and accept only this installation's actual launchers.
-   & python -c "import os,sys; target,root=sys.argv[1:]; candidates=[os.path.join(root,'BakuriFileConverter.exe'),os.path.join(root,'바꾸리.exe'),os.path.join(root,'current','BakuriFileConverter.exe')]; raise SystemExit(0 if os.path.isfile(target) and any(os.path.isfile(p) and os.path.samefile(target,p) for p in candidates) else 1)" $Target $Destination
+   # Load the saved link through Windows' typed ShellLink API. WScript's
+   # late-bound properties can be unavailable on the CI host as well.
+   & python verify_shortcut.py $Link $Destination
    if ($LASTEXITCODE -ne 0) { throw 'Shortcut does not target the stable installed launcher.' }
   }
   if (-not $Child.HasExited) { & taskkill /PID $Child.Id /T /F | Out-Null }

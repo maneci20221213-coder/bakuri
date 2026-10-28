@@ -273,7 +273,7 @@ def apply_install_options(arguments):
             persist.Save(str(link),0)
         elif link.exists():
             persist.Load(str(link))
-            target=Path(shortcut.GetPath(shellcon.SLGP_RAWPATH)[0])
+            target=Path(shortcut.GetPath(0)[0])
             if target.resolve() in {launcher.resolve(),Path(sys.executable).resolve()}:
                 link.unlink()
     except Exception as exc:

@@ -68,3 +68,18 @@ class RefactorTests(unittest.TestCase):
     windows.apply_install_options(['--desktop-shortcut=0']);self.assertFalse(link.exists())
     link.touch();target[0]=str(root/'another-app.exe')
     windows.apply_install_options(['--desktop-shortcut=0']);self.assertTrue(link.exists())
+
+ @unittest.skipUnless(sys.platform=='win32','Requires Windows ShellLink')
+ def test_real_windows_shortcut_roundtrip_with_korean_launcher(self):
+  from win32com.shell import shell
+  from verify_shortcut import verify
+  windows=self.load_windows()
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);(root/'current').mkdir();desktop=root/'Desktop';desktop.mkdir()
+   for path in (root/'Update.exe',root/'바꾸리.exe'):path.touch()
+   with patch.object(shell,'SHGetSpecialFolderPath',return_value=str(desktop)),patch.object(sys,'frozen',True,create=True),patch.object(sys,'executable',str(root/'current'/'BakuriFileConverter.exe')),patch.object(ctypes.windll.user32,'MessageBoxW') as warning:
+    windows.apply_install_options(['--desktop-shortcut=1'])
+    warning.assert_not_called();self.assertTrue((desktop/'바꾸리.lnk').is_file())
+    verify(desktop/'바꾸리.lnk',root)
+    windows.apply_install_options(['--desktop-shortcut=0'])
+    warning.assert_not_called();self.assertFalse((desktop/'바꾸리.lnk').exists())

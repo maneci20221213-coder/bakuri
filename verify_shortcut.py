@@ -12,7 +12,7 @@ def verify(link,root):
         shortcut=pythoncom.CoCreateInstance(shell.CLSID_ShellLink,None,
                                            pythoncom.CLSCTX_INPROC_SERVER,shell.IID_IShellLink)
         shortcut.QueryInterface(pythoncom.IID_IPersistFile).Load(str(link))
-        target=shortcut.GetPath(shellcon.SLGP_RAWPATH)[0]
+        target=shortcut.GetPath(0)[0]
         print('Saved shortcut target:',repr(target),flush=True)
         print('Installation directory:',repr(str(root)),flush=True)
         candidates=[root/'BakuriFileConverter.exe',root/'바꾸리.exe',root/'current'/'BakuriFileConverter.exe']

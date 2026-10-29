@@ -23,7 +23,7 @@ class UiTests(unittest.TestCase):
   w=Window(); dialog=SettingsDialog(w)
   self.assertEqual(dialog.key.count(),4)
   self.assertIn('설정',[a.text() for a in w.tray.contextMenu().actions()])
-  self.assertIn('0.14.11',w.windowTitle());self.assertNotIn('시험',w.windowTitle())
+  self.assertIn('0.14.12',w.windowTitle());self.assertNotIn('시험',w.windowTitle())
   w.tray.hide(); w.deleteLater()
 
 class PopupTests(unittest.TestCase):
@@ -187,13 +187,10 @@ class JobUiTests(unittest.TestCase):
   with patch.object(w,'start_conversion') as start:
    w.quick_selected('jpeg');self.assertEqual(start.call_args.args,(['/tmp/a.pdf'],'jpeg',False,center))
   w.popup.hide();w.tray.hide();w.deleteLater()
- def test_quick_compression_can_show_options_or_use_saved_preferences(self):
+ def test_quick_compression_uses_defaults_without_dialog(self):
   from unittest.mock import patch
-  from work_ui import CompressionDialog
-  w=Window();previous=w.settings.value('compress_direct',False,type=bool);w.settings.setValue('compress_direct',True)
+  from PySide6.QtCore import QPoint
+  w=Window()
   with patch.object(w,'begin_job') as begin:
-   w.start_compression(['/tmp/a.pdf'],__import__('PySide6.QtCore',fromlist=['QPoint']).QPoint(400,300));self.assertEqual(begin.call_args.args[1],'compress')
-  w.settings.setValue('compress_direct',False)
-  with patch.object(CompressionDialog,'exec',return_value=__import__('PySide6.QtWidgets',fromlist=['QDialog']).QDialog.Rejected),patch.object(w,'begin_job') as begin:
-   w.start_compression(['/tmp/a.pdf'],__import__('PySide6.QtCore',fromlist=['QPoint']).QPoint(400,300));begin.assert_not_called()
-  w.settings.setValue('compress_direct',previous);w.tray.hide();w.deleteLater()
+   w.start_compression(['/tmp/a.pdf'],QPoint(400,300));self.assertEqual(begin.call_args.args[1],'compress')
+  w.tray.hide();w.deleteLater()

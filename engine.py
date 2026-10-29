@@ -4,7 +4,9 @@ from PIL import Image
 from image_inputs import IMAGES, frames, white_rgb, stage_images, save_png, page_sizes
 import fitz
 from jobs import JobControl
+from merged_names import merged_path
 
+HANCOM={'.hwp','.hwpx'}
 SPREADSHEETS={'.xls','.xlsx','.xlsm','.xlsb','.xlt','.xltx','.xltm','.csv','.tsv','.ods','.dif','.slk'}
 WORDS={'.doc','.docx'}
 PRESENTATIONS={'.ppt','.pptx'}
@@ -12,7 +14,11 @@ SUPPORTED=IMAGES|{'.pdf','.hwp','.hwpx','.odt'}|SPREADSHEETS|WORDS|PRESENTATIONS
 def can_convert(path,fmt):
     fmt='jpeg' if fmt.lower()=='jpg' else fmt.lower()
     ext=Path(path).suffix.lower()
-    return ext in SUPPORTED and (fmt in {'pdf','png','jpeg'} or fmt=='hwpx' and ext in (IMAGES|{'.odt','.hwp','.pdf'}|WORDS) or fmt=='xlsx' and ext in SPREADSHEETS or fmt=='docx' and ext in {'.hwp','.hwpx'} or fmt=='pptx' and ext in (IMAGES|{'.pdf'}))
+    return ext in SUPPORTED and (fmt in {'pdf','png','jpeg'} or fmt=='hwpx' and ext in (IMAGES|{'.odt','.hwp','.hwpx','.pdf'}|WORDS) or fmt=='xlsx' and ext in SPREADSHEETS or fmt=='docx' and ext in {'.hwp','.hwpx'} or fmt=='pptx' and ext in (IMAGES|{'.pdf'}))
+def can_merge(paths,fmt):
+    extensions={Path(p).suffix.lower() for p in paths}
+    return fmt.lower() in {'pdf','pptx'} or fmt.lower()=='hwpx' and bool(extensions) and (extensions<=IMAGES|{'.pdf'} or extensions<=HANCOM)
+
 def text_import_options(src):
     with src.open('rb') as handle: sample=handle.read(65536)
     if sample.startswith((b'\xff\xfe',b'\xfe\xff')): encoding='utf-16'; origin=1200
@@ -188,7 +194,7 @@ def convert(files,fmt,merge=False,progress=lambda s:None,dpi=150,image_mode='bac
     if not files:raise ValueError('파일을 추가해 주세요.')
     if fmt not in {'png','jpeg','pdf','hwpx','xlsx','docx','pptx'}:raise ValueError('지원하지 않는 출력 형식')
     if merge and fmt not in {'pdf','hwpx','pptx'}:raise ValueError('합치기는 PDF·PPTX 또는 이미지의 HWPX 변환만 가능합니다.')
-    if merge and fmt=='hwpx' and any(p.suffix.lower() not in IMAGES|{'.pdf'} for p in files):raise ValueError('HWPX로 합치기는 이미지·PDF 파일만 가능합니다.')
+    if merge and not can_merge(files,fmt):raise ValueError('한글 문서와 이미지·PDF는 따로 선택해 합쳐 주세요.')
     for path in files:
         control.check()
         if not path.is_file() or path.suffix.lower() not in SUPPORTED:raise ValueError(f'지원하지 않는 파일: {path}')
@@ -198,11 +204,16 @@ def convert(files,fmt,merge=False,progress=lambda s:None,dpi=150,image_mode='bac
         session.control=control;td=Path(td);pdfs=[]
         if merge and fmt=='pptx':
             temp=td/'merged.pptx';session.slides_document(files,temp,td,dpi);control.check()
-            results.append(control.publish(temp,files[0].parent/'합친슬라이드.pptx'))
+            results.append(control.publish(temp,merged_path(files,'pptx')))
         elif merge and fmt=='hwpx':
             session.advance=lambda f,t:control.update(f*95,t)
-            temp=td/'merged.hwpx';session.image_document(files,temp,td,image_mode,message);control.check()
-            results.append(control.publish(temp,files[0].with_suffix('.hwpx') if len(files)==1 else files[0].parent/'합친문서.hwpx'))
+            temp=td/'merged.hwpx'
+            if all(p.suffix.lower() in HANCOM for p in files):
+                from hancom_merge import merge_documents
+                merge_documents(session.hwp(),files,temp,session.check,session.advance)
+            else:session.image_document(files,temp,td,image_mode,message)
+            control.check()
+            results.append(control.publish(temp,merged_path(files,'hwpx')))
         else:
             for index,src in enumerate(files):
                 base=index*90/len(files);width=90/len(files)
@@ -255,6 +266,6 @@ def convert(files,fmt,merge=False,progress=lambda s:None,dpi=150,image_mode='bac
                             if part.needs_pass:raise ValueError('암호가 있는 PDF는 지원하지 않습니다.')
                             control.check();document.insert_pdf(part);control.check()
                     control.check();document.save(merged,garbage=4,deflate=True,deflate_images=True);control.check()
-                results.append(control.publish(merged,files[0].with_suffix('.pdf') if len(files)==1 else files[0].parent/'합친문서.pdf'))
+                results.append(control.publish(merged,merged_path(files,'pdf')))
         control.update(99,'저장 확인')
     control.complete();return results

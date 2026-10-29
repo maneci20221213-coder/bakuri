@@ -38,14 +38,14 @@ class ImageTests(unittest.TestCase):
  def test_matrix_and_image_hwpx_merge_routing(self):
   self.assertTrue(all(can_convert('a'+ext,'hwpx') for ext in IMAGES))
   self.assertTrue(can_convert('a.hwp','hwpx'));self.assertTrue(can_convert('a.odt','hwpx'))
-  self.assertTrue(can_convert('a.pdf','hwpx'));self.assertFalse(can_convert('a.hwpx','hwpx'))
+  self.assertTrue(can_convert('a.pdf','hwpx'));self.assertTrue(can_convert('a.hwpx','hwpx'))
   calls=[]
   def export(session,paths,dest,folder,mode,progress):
    calls.append(([Path(p).name for p in paths],mode));dest.write_bytes(b'fake COM output')
   with tempfile.TemporaryDirectory() as d,patch.object(OfficeSession,'image_document',export):
    paths=[Path(d)/'one.png',Path(d)/'two.bmp']
    for path in paths:Image.new('RGB',(30,20)).save(path)
-   out=convert(paths,'hwpx',True,image_mode='inline');self.assertEqual(len(out),1);self.assertEqual(Path(out[0]).name,'합친문서.hwpx')
+   out=convert(paths,'hwpx',True,image_mode='inline');self.assertEqual(len(out),1);self.assertEqual(Path(out[0]).name,'one 등 통합본.hwpx')
    self.assertEqual(calls,[(['one.png','two.bmp'],'inline')])
    out=convert(paths,'hwpx');self.assertEqual(len(out),2);self.assertEqual([Path(p).name for p in out],['one.hwpx','two.hwpx'])
    with self.assertRaises(ValueError):convert([Path(d)/'a.hwp'],'hwpx',True)

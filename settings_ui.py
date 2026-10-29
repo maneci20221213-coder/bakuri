@@ -23,7 +23,6 @@ class SettingsDialog(QDialog):
         self.compress_profile=QComboBox();add_profiles(self.compress_profile);self.compress_profile.setCurrentIndex(self.compress_profile.findData(read_options(window.settings)['profile']));form.addRow('해상도 축소 기본값',self.compress_profile)
         self.compress_protect=QCheckBox('글자 보호 강화 · 이미지 해상도 유지');self.compress_protect.setChecked(window.settings.value('compress_protect',False,type=bool));form.addRow(self.compress_protect)
         self.compress_strip=QCheckBox('용량 축소 시 위치정보 등 메타데이터 삭제');self.compress_strip.setChecked(window.settings.value('compress_strip',False,type=bool));form.addRow(self.compress_strip)
-        self.compress_direct=QCheckBox('팝업에서 설정창 없이 용량 축소 실행');self.compress_direct.setChecked(window.settings.value('compress_direct',False,type=bool));form.addRow(self.compress_direct)
         self.notify=QCheckBox('변환 완료 알림'); self.notify.setChecked(window.settings.value('notify',True,type=bool)); form.addRow(self.notify)
         buttons=QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel); buttons.accepted.connect(self.save); buttons.rejected.connect(self.reject); form.addRow(buttons)
     def save(self):
@@ -31,7 +30,7 @@ class SettingsDialog(QDialog):
             if sys.platform=='win32':
                 from windows import set_startup,register_menu
                 set_startup(self.auto.isChecked()); register_menu(self.explorer.isChecked())
-            s=self.window.settings; s.setValue('startup_enabled',self.auto.isChecked()); s.setValue('hotkey_enabled',self.enabled.isChecked()); s.setValue('hotkey',self.key.currentText()); s.setValue('notify',self.notify.isChecked()); s.setValue('explorer',self.explorer.isChecked()); s.setValue('dpi',int(self.dpi.currentText()));s.setValue('image_mode',self.image_mode.currentData());s.setValue('compress_profile',self.compress_profile.currentData());s.setValue('compress_protect',self.compress_protect.isChecked());s.setValue('compress_strip',self.compress_strip.isChecked());s.setValue('compress_direct',self.compress_direct.isChecked()); s.sync();
+            s=self.window.settings; s.setValue('startup_enabled',self.auto.isChecked()); s.setValue('hotkey_enabled',self.enabled.isChecked()); s.setValue('hotkey',self.key.currentText()); s.setValue('notify',self.notify.isChecked()); s.setValue('explorer',self.explorer.isChecked()); s.setValue('dpi',int(self.dpi.currentText()));s.setValue('image_mode',self.image_mode.currentData());s.setValue('compress_profile',self.compress_profile.currentData());s.setValue('compress_protect',self.compress_protect.isChecked());s.setValue('compress_strip',self.compress_strip.isChecked());s.sync();
             if hasattr(self.window,'watcher'): self.window.watcher.update_settings(s)
             self.accept()
         except Exception as e: QMessageBox.warning(self,'설정을 저장하지 못했어요',friendly_error(e,'settings'))

@@ -16,7 +16,7 @@ if __name__=='__main__':
 from PySide6.QtCore import Qt, Signal, QObject, QTimer, QSettings, QEvent, QUrl, QPoint
 from PySide6.QtGui import QCursor, QDesktopServices, QColor, QBrush, QShortcut
 from PySide6.QtWidgets import *
-from engine import convert, SUPPORTED, SPREADSHEETS, can_convert, IMAGES
+from engine import convert, SUPPORTED, SPREADSHEETS, can_convert, can_merge, IMAGES, HANCOM
 from file_list import Files
 from settings_ui import SettingsDialog
 from theme import icon, stylesheet
@@ -24,7 +24,7 @@ from version import VERSION
 from jobs import JobControl,Cancelled
 from compression import compress
 from help_ui import HelpDialog
-from work_ui import CompressionDialog,ProgressPopup,CompressionResults,add_profiles,read_options
+from work_ui import ProgressPopup,CompressionResults,add_profiles,read_options
 
 class OutputFormatDelegate(QStyledItemDelegate):
     def paint(self,painter,option,index):
@@ -49,7 +49,7 @@ class QuickPopup(QWidget):
 
         grid=QGridLayout(self); grid.setContentsMargins(12,12,12,12); grid.setSpacing(8); self.buttons={}
         for key,label,arrow,pos in [('pdf','PDF','↑',(0,1)),('png','PNG','←',(1,0)),('jpeg','JPEG','→',(1,2)),('more','확장 기능','↓',(2,1)),('hwpx','HWPX','',(1,1)),('xlsx','XLSX','',(1,1)),('compress','용량 축소','',(1,1))]:
-            button=QPushButton();button.setFocusPolicy(Qt.NoFocus);button.setAutoDefault(False);button.setDefault(False); button.setAccessibleName(label); button.setCursor(Qt.PointingHandCursor);button.setFixedSize(110 if key=='more' else 100,74)
+            button=QPushButton();button.setFocusPolicy(Qt.NoFocus);button.setAutoDefault(False);button.setDefault(False); button.setAccessibleName(label); button.setCursor(Qt.PointingHandCursor);button.setFixedSize(88 if key in {'hwpx','xlsx','compress'} else 100,68 if key in {'hwpx','xlsx','compress'} else 74)
             content=QVBoxLayout(button);content.setContentsMargins(6,5,6,6);content.setSpacing(1)
             image=QLabel();image.setAttribute(Qt.WA_TransparentForMouseEvents);image.setAlignment(Qt.AlignCenter);image.setPixmap(icon('plus' if key=='more' else key).pixmap(30,32));content.addWidget(image)
             text=QLabel(label);text.setAttribute(Qt.WA_TransparentForMouseEvents);text.setAlignment(Qt.AlignCenter);text.setStyleSheet('font-size:12px;font-weight:600;');content.addWidget(text)
@@ -102,6 +102,9 @@ class QuickPopup(QWidget):
         elif pdfs:
             self.actions={'pdf':'pdf_merge','jpeg':'hwpx'}
             labels['pdf']=('PDF 합치기','pdf');labels['jpeg']=('한글','hwpx')
+        elif extensions and extensions <= HANCOM and len(paths)>1:
+            self.actions={'pdf':'hwp_merge'}
+            labels['pdf']=('한글 합치기','hwpx')
         for key,(label,asset) in labels.items():
             button=self.buttons[key];button.setAccessibleName(label)
             button.layout().itemAt(0).widget().setPixmap(icon(asset).pixmap(30,32))
@@ -240,13 +243,15 @@ class Window(QWidget):
         self.output_changed(self.fmt.currentText())
     def output_changed(self,format):
         paths=self.files.checked_paths()
-        allowed=format in {'PDF','PPTX'} or format=='HWPX' and bool(paths) and all(Path(p).suffix.lower() in IMAGES|{'.pdf'} for p in paths)
+        allowed=can_merge(paths,format)
         self.merge.setEnabled(allowed and not self.busy)
         self.compression_profile.setVisible(format=='용량 축소')
         if not self.busy:self.run.setText('용량 축소 시작' if format=='용량 축소' else '변환 시작  →')
         if not allowed:self.individual.setChecked(True)
     def open_main(self,reason='expanded'):
-        self.show();self.raise_();self.activateWindow()
+        if self.isMinimized():self.showNormal()
+        else:self.show()
+        self.raise_();self.activateWindow()
         if hasattr(self,'updater'):self.updater.request(reason)
     def open_help(self):
         HelpDialog(self).exec()
@@ -264,9 +269,13 @@ class Window(QWidget):
             self.tray.showMessage('바꾸리','지원하는 파일을 선택해 주세요.'); return
         self.popup.present(self.quick_paths,origin,tab)
     def quick_selected(self,key):
-        if self.busy or (hasattr(self,'updater') and self.updater.installing): return
+        if hasattr(self,'updater') and self.updater.installing:return
         if key=='more':
-            self.files.clear(); self.files.add_paths(self.quick_paths); self.open_main('expanded')
+            if not self.busy:self.files.add_paths(self.quick_paths)
+            self.open_main('expanded');return
+        if self.busy:return
+        if key=='hwp_merge':
+            self.start_conversion(self.quick_paths,'hwpx',True,self.popup.geometry().center())
         elif key=='pdf_merge':
             if len(self.quick_paths)<2:
                 QMessageBox.information(self,'PDF 합치기','PDF 파일을 두 개 이상 선택해 주세요.');return
@@ -302,9 +311,6 @@ class Window(QWidget):
         if self.busy:return
         if any(Path(path).suffix.lower() not in IMAGES|{'.pdf'} for path in paths):
             QMessageBox.information(self,'파일 확인','용량 축소는 이미지와 PDF만 지원합니다.');return
-        if anchor is not None and not self.settings.value('compress_direct',False,type=bool):
-            dialog=CompressionDialog(self.settings,self)
-            if dialog.exec()!=QDialog.Accepted:return
         options=read_options(self.settings);self.compression_profile.setCurrentIndex(self.compression_profile.findData(options['profile']))
         self.begin_job(lambda control:compress(paths,control=control,**options),'compress',anchor)
     def begin_job(self,operation,kind,anchor=None):
@@ -365,9 +371,9 @@ class Window(QWidget):
         if self.busy: QMessageBox.information(self,'변환 중','변환이 끝난 뒤 종료해 주세요.'); return
         QApplication.quit()
     def closeEvent(self,e):
-        if self.tray.isSystemTrayAvailable(): self.hide(); e.ignore()
+        if self.tray.isSystemTrayAvailable(): self.files.clear();self.hide();e.ignore()
         elif self.busy: e.ignore()
-        else: e.accept()
+        else:self.files.clear();e.accept()
 
 if __name__=='__main__':
     app=QApplication(sys.argv); app.setQuitOnLastWindowClosed(False)

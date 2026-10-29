@@ -28,7 +28,7 @@ class HelpTests(unittest.TestCase):
   from app import SettingsDialog
   w=Window();dialog=HelpDialog(w)
   self.assertEqual([dialog.tabs.tabText(i) for i in range(dialog.tabs.count())],['사용 설명','패치노트'])
-  self.assertIn('0.14.11',dialog.notes.toPlainText())
+  self.assertIn('0.14.12',dialog.notes.toPlainText())
   dialog.tabs.setCurrentIndex(1);self.assertEqual(dialog.tabs.currentWidget(),dialog.notes)
   self.assertNotIn('단축키 다시 연결',[a.text() for a in w.tray.contextMenu().actions()])
   settings=SettingsDialog(w)

@@ -13,7 +13,7 @@ class PopupMotion(QObject):
         self.closing=False;self.value=1.;self.targets={};self.callback=None
     def reset(self):
         self.animation.stop();self.callback=None;self.closing=False
-        for button,rect in self.targets.items():button.setFixedSize(rect.size());button.move(rect.topLeft())
+        for button,rect in self.targets.items():button.move(rect.topLeft())
         self.targets={};self.owner.layout().setEnabled(True);self.owner.setEnabled(True)
         if self.enabled:self.owner.setWindowOpacity(1.)
     def open(self):
@@ -22,13 +22,13 @@ class PopupMotion(QObject):
         self.targets={b:QRect(b.geometry()) for b in self.owner.buttons.values() if b.isVisible()}
         self.owner.layout().setEnabled(False);self.closing=False
         self.frame(0.);self.animation.setStartValue(0.);self.animation.setEndValue(1.)
-        curve=QEasingCurve(QEasingCurve.OutBack);curve.setOvershoot(1.8)
-        self.animation.setEasingCurve(curve);self.animation.setDuration(240);self.animation.start()
+        curve=QEasingCurve(QEasingCurve.OutCubic)
+        self.animation.setEasingCurve(curve);self.animation.setDuration(180);self.animation.start()
     def frame(self,value):
-        self.value=float(value);center=QPointF(self.owner.rect().center());spread=.5+.5*self.value;scale=.74+.26*self.value
+        self.value=max(0.,min(1.,float(value)));center=QPointF(self.owner.rect().center());spread=.65+.35*self.value
         for button,rect in self.targets.items():
-            size=rect.size()*scale;position=center+(QPointF(rect.center())-center)*spread
-            button.setFixedSize(size);button.move(round(position.x()-(size.width()-1)/2),round(position.y()-(size.height()-1)/2))
+            size=rect.size();position=center+(QPointF(rect.center())-center)*spread
+            button.move(round(position.x()-(size.width()-1)/2),round(position.y()-(size.height()-1)/2))
         self.owner.setWindowOpacity(max(0.,min(1.,self.value*1.5)))
     def close(self,callback=None):
         if self.closing:return

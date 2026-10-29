@@ -10,7 +10,7 @@ from app import QuickPopup
 app=QApplication([]);popup=QuickPopup()
 previous_cursor=QCursor.pos();QCursor.setPos(app.primaryScreen().availableGeometry().center())
 assert popup.motion.enabled,'Popup motion must be enabled on native Windows'
-frames=[];popup.motion.animation.valueChanged.connect(lambda value:frames.append(popup.buttons['pdf'].width()))
+frames=[];popup.motion.animation.valueChanged.connect(lambda value:frames.append(popup.buttons['pdf'].y()))
 for source in ['a.png','a.pdf']:
  frames.clear();popup.present([source]);assert not popup.buttons['pdf'].property('selected')
  QTest.qWait(320)

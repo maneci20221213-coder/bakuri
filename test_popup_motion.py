@@ -11,11 +11,11 @@ class PopupMotionTests(unittest.TestCase):
   popup.present(['a.png']);APP.processEvents();return popup
  def test_spring_open_and_shrink_close_emit_choice_once_after_closing(self):
   popup=self.popup();button=popup.buttons['pdf'];target=popup.motion.targets[button]
-  popup.motion.animation.setCurrentTime(0);self.assertLess(button.width(),target.width())
+  popup.motion.animation.setCurrentTime(0);self.assertEqual(button.size(),target.size());self.assertGreater(button.y(),target.y())
   popup.motion.animation.setCurrentTime(240);self.assertEqual(button.geometry(),target)
   chosen=[];popup.chosen.connect(chosen.append);popup.pick('pdf');popup.pick('jpeg')
   self.assertFalse(popup.monitor.isActive());self.assertTrue(popup.motion.closing);self.assertEqual(chosen,[])
-  popup.motion.animation.setCurrentTime(110);self.assertLess(button.width(),target.width())
+  popup.motion.animation.setCurrentTime(110);self.assertEqual(button.size(),target.size());self.assertGreater(button.y(),target.y())
   popup.motion.animation.setCurrentTime(180);self.assertFalse(popup.isVisible());self.assertEqual(chosen,['pdf'])
  def test_reopening_cancels_old_pending_choice_and_restores_sizes(self):
   popup=self.popup();popup.motion.animation.setCurrentTime(240)

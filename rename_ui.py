@@ -4,7 +4,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt,QStandardPaths
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QLineEdit,QLabel,QSpinBox,QPushButton,QMessageBox,QFormLayout,QComboBox,QCheckBox,QDialog,QPlainTextEdit,QDialogButtonBox,QApplication,QStyledItemDelegate)
-from rename_engine import preview,apply,undo,pasted_lines
+from rename_engine import preview,apply,undo,fill_down
 
 class TextDelegate(QStyledItemDelegate):
     def createEditor(self,parent,option,index):
@@ -16,13 +16,19 @@ def positions(combo):
 class PasteTextDialog(QDialog):
     def __init__(self,count,parent=None):
         super().__init__(parent);self.count=count;self.values=[];self.setWindowTitle('파일별 문구 붙여넣기');self.resize(500,390)
-        layout=QVBoxLayout(self);label=QLabel(f'체크한 파일 {count}개에 위에서부터 한 줄씩 연결합니다.\n엑셀 한 열이나 메모장의 여러 줄을 Ctrl+V로 붙여넣으세요.\n빈 줄은 해당 파일에 문구를 추가하지 않습니다.');label.setWordWrap(True);layout.addWidget(label)
+        layout=QVBoxLayout(self);label=QLabel(f'체크한 파일 {count}개에 위에서부터 한 줄씩 연결합니다.\n엑셀 한 열이나 메모장의 여러 줄을 Ctrl+V로 붙여넣으세요.\n빈 줄과 모자란 줄은 위 문구로 자동 채웁니다. 첫 줄만 적어도 됩니다.');label.setWordWrap(True);layout.addWidget(label)
         self.text=QPlainTextEdit();layout.addWidget(self.text)
         mime=QApplication.clipboard().mimeData()
         if mime and mime.hasText() and not mime.hasUrls():self.text.setPlainText(mime.text())
+        self.fill=QPushButton('채우기');self.fill.setToolTip('빈 줄을 위 문구로 채우고, 선택한 파일 수만큼 아래로 늘립니다.');self.fill.clicked.connect(self.fill_blanks);layout.addWidget(self.fill)
+        note=QLabel('채우기로 미리 확인할 수 있고, 확인을 누를 때도 자동으로 채웁니다.');note.setWordWrap(True);layout.addWidget(note)
         buttons=QDialogButtonBox(QDialogButtonBox.Ok|QDialogButtonBox.Cancel);buttons.accepted.connect(self.assign);buttons.rejected.connect(self.reject);layout.addWidget(buttons)
+    def fill_blanks(self):
+        try:values=fill_down(self.text.toPlainText(),self.count)
+        except ValueError as exc:QMessageBox.information(self,'채우기 확인',str(exc));return
+        self.text.setPlainText('\n'.join(values))
     def assign(self):
-        try:self.values=pasted_lines(self.text.toPlainText(),self.count)
+        try:self.values=fill_down(self.text.toPlainText(),self.count)
         except ValueError as exc:QMessageBox.information(self,'문구 개수 확인',str(exc));return
         self.accept()
 

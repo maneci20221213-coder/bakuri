@@ -31,13 +31,27 @@ def insert_token(stem,token,position='after',separator='_',marker=''):
     after=separator if right and separator and not right.startswith(separator) else ''
     return left+before+token+after+right
 
-def pasted_lines(text,count):
-    # One terminal newline is normal for an Excel column. Interior/trailing
-    # blank rows beyond that remain real entries and never shift assignments.
+def _text_lines(text):
     lines=text.replace('\r\n','\n').replace('\r','\n').splitlines()
     if any('\t' in line for line in lines):raise ValueError('한 열만 복사해 주세요. 여러 열은 붙여넣을 수 없습니다.')
+    return lines
+
+def pasted_lines(text,count):
+    lines=_text_lines(text)
     if len(lines)!=count:raise ValueError(f'선택 파일은 {count}개, 붙여넣은 문구는 {len(lines)}줄입니다. 개수를 맞춰 주세요.')
     return lines
+
+def fill_down(text,count):
+    """Forward-fill blank rows and missing trailing rows without shifting files."""
+    if count<=0:raise ValueError('문구를 붙일 파일을 먼저 선택해 주세요.')
+    lines=_text_lines(text)
+    if len(lines)>count:raise ValueError(f'선택 파일은 {count}개, 붙여넣은 문구는 {len(lines)}줄입니다. 넘치는 줄을 지워 주세요.')
+    if not any(line.strip() for line in lines):raise ValueError('채울 문구를 한 줄 이상 입력해 주세요.')
+    previous='';values=[]
+    for line in lines+['']*(count-len(lines)):
+        if line.strip():previous=line
+        values.append(previous)
+    return values
 
 def preview(paths,find='',replace='',prefix='',suffix='',base='',start=1,digits=3,number_enabled=None,number_position='after',number_marker='',separator='_',text_by_source=None,text_position='before',text_marker='',text_mode='insert',**unused):
     rows=[]

@@ -2,4 +2,4 @@
 DEVELOPMENT=True
 SETTINGS_APP='FileConverterDevelopment'
 SERVER_NAME='BakuriDevelopment'
-BUILD_LABEL='개발용 0.15.0-dev.2'
+BUILD_LABEL='개발용 0.15.0-dev.3'

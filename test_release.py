@@ -57,16 +57,11 @@ class ReleaseUiTests(unittest.TestCase):
    self.assertEqual(w.fmt.model().item(w.fmt.findText('PPTX')).foreground().color().name(),'#a4afbd')
    w.files.item(1).setCheckState(0,Qt.Unchecked);self.assertTrue(enabled('PPTX'))
    w.files.clear();self.assertTrue(all(w.fmt.model().item(i).isEnabled() for i in range(w.fmt.count())))
- def test_tray_white_arrows_are_transparent(self):
-  from theme import icon,ASSETS
-  from PySide6.QtGui import QImage
-  original=QImage(str(ASSETS/'app.png'));tray=icon('tray').pixmap(original.size()).toImage()
-  whites=blues=0
-  for y in range(original.height()):
-   for x in range(original.width()):
-    a=original.pixelColor(x,y);b=tray.pixelColor(x,y)
-    if a.alpha()>250 and min(a.red(),a.green(),a.blue())>250:
-     whites+=1;self.assertLess(b.alpha(),8)
-    if a.alpha()>250 and a.red()<60 and a.blue()>180:
-     blues+=1;self.assertGreater(b.alpha(),220)
-  self.assertGreater(whites,1000);self.assertGreater(blues,1000)
+ def test_app_and_tray_arrows_are_transparent(self):
+  from theme import ASSETS
+  from PIL import Image,ImageChops
+  with Image.open(ASSETS/'app.png') as original,Image.open(ASSETS/'tray.png') as tray:
+   self.assertIsNone(ImageChops.difference(original,tray).getbbox())
+   for x,y in [(82,49),(65,100),(0,3)]:
+    self.assertEqual(original.getpixel((round(x*1024/140),round((y-3)*1024/140)))[3],0)
+   self.assertEqual(original.getpixel((round(40*1024/140),round(26*1024/140))),(46,131,242,255))

@@ -40,7 +40,7 @@ class Events(QObject):
     message=Signal(str); done=Signal(object); error=Signal(str); selected=Signal(object); clicked=Signal(object); dismiss=Signal(); popup_key=Signal(int); progress=Signal(int,str)
 class QuickPopup(QWidget):
     chosen=Signal(str); visibility=Signal(bool)
-    def __init__(self):
+    def __init__(self,animate=None):
         super().__init__(None,Qt.Tool|Qt.FramelessWindowHint|Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground); self.setFixedSize(350,264)
         self.setStyleSheet('QuickPopup {background:transparent;} QPushButton {background:rgba(255,255,255,225);color:#26354A;border:1px solid rgba(218,228,242,230);border-radius:12px;padding:0;} QPushButton:hover {background:rgba(239,246,255,245);border-color:#96C1F8;} QPushButton[selected="true"] {background:rgba(244,249,255,245);border:2px solid #2E83F2;} QLabel {background:transparent;border:0;color:#26354A;font-family:"Malgun Gothic","Noto Sans CJK KR",sans-serif;}')
@@ -58,6 +58,8 @@ class QuickPopup(QWidget):
             shadow=QGraphicsDropShadowEffect(button);shadow.setBlurRadius(12);shadow.setOffset(0,3);shadow.setColor(__import__('PySide6.QtGui',fromlist=['QColor']).QColor(20,43,76,28));button.setGraphicsEffect(shadow)
             button.setProperty('selected',False);button.installEventFilter(self);button.clicked.connect(lambda checked=False,k=key:self.pick(k));grid.addWidget(button,*pos,Qt.AlignCenter);self.buttons[key]=button
         self.note=QLabel('방향키 → Enter · Esc 닫기'); self.note.setAlignment(Qt.AlignCenter); self.note.hide()
+        from popup_motion import PopupMotion
+        self.motion=PopupMotion(self,animate)
         self.current='pdf'; QApplication.instance().installEventFilter(self)
     def clicked_at(self,point):
         if not self.isVisible(): return
@@ -79,7 +81,10 @@ class QuickPopup(QWidget):
             if self.origin: self.check_source()
             else: self.hide()
         return super().event(event)
+    def hide(self):
+        self.motion.close()
     def present(self,paths,origin=0,tab=0):
+        self.motion.reset()
         self.origin=origin; self.origin_tab=tab
         extensions={Path(p).suffix.lower() for p in paths}
         images=bool(paths) and extensions <= IMAGES
@@ -105,7 +110,8 @@ class QuickPopup(QWidget):
         self.note.setText(f'{len(paths)}개 파일 · 방향키 → Enter · Esc 닫기')
         self.current='pdf'; point=QCursor.pos(); screen=QApplication.screenAt(point) or QApplication.primaryScreen(); rect=screen.availableGeometry()
         self.move(max(rect.left(),min(point.x()-self.width()//2,rect.right()-self.width()+1)),max(rect.top(),min(point.y()-self.height()//2,rect.bottom()-self.height()+1)))
-        self.show(); self.activateWindow(); self.select('pdf' if self.buttons['pdf'].isEnabled() else 'png'); self.monitor.start()
+        if self.motion.enabled:self.setWindowOpacity(0.)
+        self.show(); self.activateWindow(); self.select('pdf' if self.buttons['pdf'].isEnabled() else 'png'); self.monitor.start();self.visibility.emit(True);self.motion.open()
     def select(self,key):
         if key not in self.buttons or not self.buttons[key].isVisible() or not self.buttons[key].isEnabled(): return
         self.current=key
@@ -113,14 +119,16 @@ class QuickPopup(QWidget):
             button.setProperty('selected',name==key);button.style().unpolish(button);button.style().polish(button);button.update()
         self.buttons[key].setFocus(Qt.OtherFocusReason)
     def native_key(self,vk):
-        if not self.isVisible(): return
+        if not self.isVisible() or self.motion.closing: return
         mapping={0x26:Qt.Key_Up,0x28:Qt.Key_Down,0x25:Qt.Key_Left,0x27:Qt.Key_Right,0x0D:Qt.Key_Return,0x1B:Qt.Key_Escape,0x09:Qt.Key_Tab,0x20:Qt.Key_Space}
         key=mapping.get(vk)
         if key is not None:self.handle_key(key)
     def pick(self,key):
-        if not self.isVisible():return
-        self.hide(); self.chosen.emit(self.actions.get(key,key))
+        if not self.isVisible() or self.motion.closing:return
+        action=self.actions.get(key,key)
+        self.motion.close(lambda:self.chosen.emit(action))
     def eventFilter(self,obj,event):
+        if hasattr(self,'motion') and self.motion.closing:return super().eventFilter(obj,event)
         if self.isVisible() and event.type()==QEvent.Enter:
             key=next((k for k,b in self.buttons.items() if b is obj),None)
             if key:self.select(key)
@@ -143,6 +151,7 @@ class QuickPopup(QWidget):
         target=neighbors.get(self.current,{}).get(key)
         if target:self.select(target)
     def handle_key(self,key):
+        if self.motion.closing:return
         if key in (Qt.Key_Up,Qt.Key_Down,Qt.Key_Left,Qt.Key_Right):self.move_selection(key)
         elif key==Qt.Key_Tab:
             visible=[k for k in ('pdf','png','hwpx','xlsx','compress','jpeg','more') if self.buttons[k].isVisible() and self.buttons[k].isEnabled()]

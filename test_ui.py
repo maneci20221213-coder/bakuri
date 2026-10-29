@@ -163,19 +163,19 @@ class JobUiTests(unittest.TestCase):
   from PySide6.QtCore import QPoint
   from PySide6.QtTest import QTest
   from jobs import Cancelled
-  for stop_from_popup in [True,False]:
+  for stop_from_tray in [True,False]:
    w=Window();w.settings.setValue('notify',False);entered=threading.Event();release=threading.Event()
    def operation(control):
     control.update(37,'test measured units');entered.set();release.wait(2);control.check()
    center=QPoint(400,300);w.begin_job(operation,'convert',center);self.assertTrue(entered.wait(1));app.processEvents()
-   self.assertEqual(w.run.text(),'작업 중지');self.assertTrue(w.run.isEnabled());self.assertEqual(w.progress_popup.number.text(),'37%');self.assertTrue(w.progress_popup.isVisible())
-   self.assertLessEqual(abs(w.progress_popup.geometry().center().x()-center.x()),1);self.assertLessEqual(abs(w.progress_popup.geometry().center().y()-center.y()),1)
-   QTest.mouseClick(w.progress_popup.stop if stop_from_popup else w.run,Qt.LeftButton)
-   self.assertTrue(w.control.cancelled.is_set());self.assertEqual(w.run.text(),'중지 요청 중');self.assertTrue(w.busy);self.assertFalse(w.run.isEnabled());self.assertFalse(w.progress_popup.stop.isEnabled())
+   self.assertEqual(w.run.text(),'작업 중지');self.assertTrue(w.run.isEnabled());self.assertIn('37%',w.tray.toolTip());self.assertTrue(w.tray_stop_action.isEnabled())
+   if stop_from_tray:w.tray_stop_action.trigger()
+   else:QTest.mouseClick(w.run,Qt.LeftButton)
+   self.assertTrue(w.control.cancelled.is_set());self.assertEqual(w.run.text(),'중지 요청 중');self.assertTrue(w.busy);self.assertFalse(w.run.isEnabled());self.assertFalse(w.tray_stop_action.isEnabled())
    w.update_progress(60,'late queued progress');self.assertIn('중지 요청 중',w.status.text())
    release.set();deadline=time.monotonic()+2
    while w.busy and time.monotonic()<deadline:QTest.qWait(10)
-   self.assertFalse(w.busy);self.assertFalse(w.progress_popup.isVisible());self.assertIn('작업 중지',w.status.text());self.assertTrue(w.run.isEnabled());self.assertEqual(w.run.text(),'변환 시작  →');w.tray.hide();w.deleteLater()
+   self.assertFalse(w.busy);self.assertIn('작업 중지',w.status.text());self.assertTrue(w.run.isEnabled());self.assertEqual(w.run.text(),'변환 시작  →');w.tray.hide();w.deleteLater()
  def test_main_compression_mode_and_results(self):
   w=Window();w.settings.setValue('notify',False);w.fmt.setCurrentText('용량 축소');self.assertEqual(w.run.text(),'용량 축소 시작');self.assertFalse(w.merge.isEnabled());self.assertFalse(w.compression_profile.isHidden())
   row=dict(source='/tmp/a.jpeg',output='/tmp/a_용량축소.jpeg',before=2_000_000,after=900_000,status='저장 완료',detail='1MB 목표 달성')

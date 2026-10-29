@@ -3,7 +3,7 @@ import os,re
 from pathlib import Path
 from PySide6.QtCore import Qt,Signal,QSize
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import (QTreeWidget,QTreeWidgetItem,QHeaderView,QAbstractItemView,QLabel,QCheckBox,QMenu)
+from PySide6.QtWidgets import (QApplication,QTreeWidget,QTreeWidgetItem,QHeaderView,QAbstractItemView,QLabel,QCheckBox,QMenu)
 from engine import SUPPORTED,SPREADSHEETS,IMAGES
 from theme import icon,stylesheet
 
@@ -11,7 +11,7 @@ def natural_key(text):
     return tuple((1,int(p)) if p.isdigit() else (0,p.casefold()) for p in re.split(r'(\d+)',text))
 
 class Files(QTreeWidget):
-    changed=Signal()
+    changed=Signal();paste_requested=Signal()
     def __init__(self,allow_all=False):
         super().__init__();self.allow_all=allow_all; self.setColumnCount(4); self.setHeaderLabels(['','미리보기','파일명','용량'])
         self.setRootIsDecorated(False); self.setAlternatingRowColors(False); self.setStyleSheet(stylesheet())
@@ -34,9 +34,12 @@ class Files(QTreeWidget):
         else: super().keyPressEvent(event)
     def context_menu(self,point):
         item=self.itemAt(point)
-        if item is None: return
-        if not item.isSelected(): self.clearSelection(); item.setSelected(True)
-        menu=QMenu(self); menu.addAction('목록에서 삭제',self.delete_selected); menu.exec(self.viewport().mapToGlobal(point))
+        menu=QMenu(self);paste=menu.addAction('파일 붙여넣기 (Ctrl+V)',self.paste_requested.emit)
+        mime=QApplication.clipboard().mimeData();paste.setEnabled(bool(mime and any(u.isLocalFile() for u in mime.urls())) and self.isEnabled())
+        if item is not None:
+            if not item.isSelected():self.clearSelection();item.setSelected(True)
+            menu.addSeparator();menu.addAction('목록에서 삭제',self.delete_selected)
+        menu.exec(self.viewport().mapToGlobal(point))
     def place_master(self,*_):
         x=self.header().sectionViewportPosition(0);h=max(36,self.header().height())
         self.master.setGeometry(x+8,(h-24)//2,20,24); self.selection_caption.setGeometry(x+34,0,39,h)

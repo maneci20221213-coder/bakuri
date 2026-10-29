@@ -82,5 +82,5 @@ class UserMessageTests(unittest.TestCase):
   w=Window()
   with patch('app.QMessageBox.warning') as warning,patch('user_messages.log_error'):
    w.finished(dict(paths=[],rows=[],outcome='failed',error='COM SECRET trace',kind='convert'))
-   self.assertNotIn('SECRET',warning.call_args.args[2]);self.assertIn('원본',warning.call_args.args[2])
+   warning.assert_not_called();self.assertNotIn('SECRET',w.last_result['summary']);self.assertIn('원본',w.last_result['summary'])
   w.tray.hide();w.hide();w.deleteLater()

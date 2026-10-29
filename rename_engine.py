@@ -16,13 +16,43 @@ def invalid(name):
     if len(name.encode('utf-16-le'))//2>255:return '파일명이 너무 깁니다.'
     return ''
 
-def preview(paths,find='',replace='',prefix='',suffix='',base='',start=1,digits=3,**unused):
+def insert_token(stem,token,position='after',separator='_',marker=''):
+    if not token:return stem
+    if position=='before':index=0
+    elif position=='after':index=len(stem)
+    elif position in {'before_marker','after_marker'}:
+        if not marker:raise ValueError('삽입 기준 문자를 입력해 주세요.')
+        index=stem.find(marker)
+        if index<0:raise ValueError('삽입 기준 문자가 이름에 없습니다.')
+        if position=='after_marker':index+=len(marker)
+    else:raise ValueError('삽입 위치를 확인해 주세요.')
+    left,right=stem[:index],stem[index:]
+    before=separator if left and separator and not left.endswith(separator) else ''
+    after=separator if right and separator and not right.startswith(separator) else ''
+    return left+before+token+after+right
+
+def pasted_lines(text,count):
+    # One terminal newline is normal for an Excel column. Interior/trailing
+    # blank rows beyond that remain real entries and never shift assignments.
+    lines=text.replace('\r\n','\n').replace('\r','\n').splitlines()
+    if any('\t' in line for line in lines):raise ValueError('한 열만 복사해 주세요. 여러 열은 붙여넣을 수 없습니다.')
+    if len(lines)!=count:raise ValueError(f'선택 파일은 {count}개, 붙여넣은 문구는 {len(lines)}줄입니다. 개수를 맞춰 주세요.')
+    return lines
+
+def preview(paths,find='',replace='',prefix='',suffix='',base='',start=1,digits=3,number_enabled=None,number_position='after',number_marker='',separator='_',text_by_source=None,text_position='before',text_marker='',text_mode='insert',**unused):
     rows=[]
     for index,source in enumerate(paths):
-        source=Path(source).absolute();stem=(base+f'_{start+index:0{digits}d}') if base else source.stem
+        source=Path(source).absolute();stem=base or source.stem;error=''
         if find:stem=stem.replace(find,replace)
-        name=prefix+stem+suffix+source.suffix;target=source.with_name(name) if not re.search(r'[/\\\x00]',name) else source
-        error=invalid(name)
+        try:
+            custom=(text_by_source or {}).get(str(source),'')
+            if custom:
+                stem=custom if text_mode=='replace' else insert_token(stem,custom,text_position,separator,text_marker)
+            if number_enabled if number_enabled is not None else bool(base):
+                stem=insert_token(stem,f'{start+index:0{digits}d}',number_position,separator,number_marker)
+        except ValueError as exc:error=str(exc)
+        name=prefix+stem+suffix+source.suffix;error=error or invalid(name)
+        target=source.with_name(name) if not re.search(r'[/\\\x00]',name) else source
         try:
             if source.is_symlink() or not source.is_file():raise ValueError()
             token=identity(source)

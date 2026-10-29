@@ -28,7 +28,7 @@ class MergeTests(unittest.TestCase):
       self.assertEqual(control.outputs,[])
      else:
       out=convert(files,'hwpx',True);self.assertEqual(Path(out[0]).name,'문서_통합본.hwpx')
-    self.assertEqual(Path(inserts[0]['FileName']),files[1]);self.assertEqual(inserts[0]['KeepSection'],1);self.assertEqual(inserts[0]['KeepStyle'],1)
+    self.assertTrue(Path(inserts[0]['FileName']).samefile(files[1]));self.assertEqual(inserts[0]['KeepSection'],1);self.assertEqual(inserts[0]['KeepStyle'],1)
     self.assertEqual(cleared,[1,1]);self.assertEqual([p.read_bytes() for p in files],[b'original']*2)
  def test_window_and_popup(self):
   from PySide6.QtWidgets import QApplication,QSystemTrayIcon

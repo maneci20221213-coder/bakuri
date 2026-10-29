@@ -34,6 +34,9 @@ class RenameTests(unittest.TestCase):
   rows=preview([a],find='a',replace='A');apply(rows,self.journal);self.assertTrue((self.root/'A.pdf').exists());undo(self.journal);self.assertTrue(a.exists())
  def test_stale_preview_and_modified_undo_are_rejected(self):
   a=self.file('a.pdf');rows=preview([a],prefix='new_');a.write_bytes(b'changed')
+  # A same-size write may share the old clock tick on Windows. Make the
+  # metadata change explicit instead of depending on execution timing.
+  changed_time=rows[0]['identity'][-1]+1_000_000_000;os.utime(a,ns=(changed_time,changed_time))
   with self.assertRaises(ValueError):apply(rows,self.journal)
   rows=preview([a],prefix='new_');apply(rows,self.journal);new=self.root/'new_a.pdf';new.write_bytes(b'modified')
   with self.assertRaises(ValueError):undo(self.journal)

@@ -17,7 +17,7 @@ internal static class Installer {
             int index = Array.IndexOf(args, "--installto");
             if (index >= 0 && index + 1 < args.Length) destination = args[index + 1];
             var job = new InstallJob(destination);
-            try { job.Run(Array.IndexOf(args, "--desktop-shortcut=0") < 0, true, delegate(string text) {}); return 0; }
+            try { job.Run(Array.IndexOf(args, "--desktop-shortcut=0") < 0, false, delegate(string text) {}); return 0; }
             catch (Exception error) { job.Record(error.ToString()); return 1; }
         }
         using (var window = new InstallWindow()) {
@@ -41,7 +41,7 @@ internal sealed class InstallJob {
         if (!process.WaitForExit(timeoutMilliseconds)) throw new TimeoutException("The installation process is still running. Its files and logs were preserved.");
         return process.ExitCode;
     }
-    internal void Run(bool shortcut, bool background, Action<string> progress) {
+    internal void Run(bool shortcut, bool launch, Action<string> progress) {
         Record("Destination: " + destination);
         // Silent repair can stop installed processes. Refuse to start while the
         // app is running, rather than silently interrupting a conversion.
@@ -74,8 +74,9 @@ internal sealed class InstallJob {
             if (code != 0) throw new IOException("Installer exit: " + code);
             string executable = Path.Combine(destination, "current", "BakuriFileConverter.exe");
             if (!File.Exists(executable) || !File.Exists(Path.Combine(destination, "Update.exe"))) throw new IOException("Installed executable missing");
+            if (!launch) { Record("Silent installation complete; app launch skipped"); return; }
             progress("설치가 끝났습니다. 바꾸리를 실행합니다."); Record("Installation complete; starting app separately");
-            using (Process app = Process.Start(new ProcessStartInfo(executable, "--desktop-shortcut=" + (shortcut ? "1" : "0") + (background ? " --background" : "")) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(executable) })) {
+            using (Process app = Process.Start(new ProcessStartInfo(executable, "--desktop-shortcut=" + (shortcut ? "1" : "0")) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(executable) })) {
                 Record("Started app PID: " + app.Id);
             }
         } catch (Exception error) { Record(error.ToString()); throw; }
@@ -132,7 +133,7 @@ internal sealed class InstallWindow : Form {
         bool timedOut = false;
         bool succeeded = false;
         try {
-            await Task.Run(() => job.Run(shortcut, false, text => ((IProgress<string>)progress).Report(text)));
+            await Task.Run(() => job.Run(shortcut, true, text => ((IProgress<string>)progress).Report(text)));
             Result = 0; succeeded = true;
         } catch (TimeoutException) {
             timedOut = true;

@@ -11,9 +11,7 @@ try {
  if ($Process.ExitCode -ne 0) { throw "Installation failed: $($Process.ExitCode)" }
  $Exe=Join-Path $Destination 'current\BakuriFileConverter.exe'
  if (-not (Test-Path $Exe)) { throw 'Installed executable missing.' }
- Start-Sleep -Seconds 3
- Get-Process BakuriFileConverter -ErrorAction SilentlyContinue | Stop-Process -Force
- if (Test-Path $Link) { throw 'Installer unexpectedly created a desktop shortcut without a choice.' }
+  if (Test-Path $Link) { throw 'Installer unexpectedly created a desktop shortcut without a choice.' }
  foreach ($Choice in @('1','0')) {
   $Child=Start-Process $Exe -ArgumentList @('--background',"--desktop-shortcut=$Choice") -PassThru
   $Expected=$Choice -eq '1';$Observed=$false

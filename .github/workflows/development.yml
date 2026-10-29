@@ -1,0 +1,40 @@
+name: Developer test build
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: windows-2022
+    timeout-minutes: 25
+    env:
+      QT_QPA_PLATFORM: offscreen
+      BAKURI_DISABLE_SHELL_INTEGRATION: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install -r requirements.txt pyinstaller==6.16.0
+          if ($LASTEXITCODE -ne 0) { throw 'Dependencies failed' }
+      - name: Tests
+        shell: pwsh
+        run: |
+          python -m unittest discover -v
+          if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
+      - name: Build portable developer edition
+        shell: pwsh
+        run: ./build_dev.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Bakuri-Development-0.15.0-dev.1
+          path: DevArtifacts/*
+          if-no-files-found: error
+          retention-days: 30

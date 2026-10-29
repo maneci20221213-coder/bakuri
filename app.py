@@ -1,5 +1,6 @@
 import sys, os, threading, json
 from pathlib import Path
+from build_channel import DEVELOPMENT,SETTINGS_APP,SERVER_NAME,BUILD_LABEL
 from user_messages import friendly_error
 
 def startup_error(kind,value,tb):
@@ -9,7 +10,7 @@ def startup_error(kind,value,tb):
         import ctypes
         ctypes.windll.user32.MessageBoxW(None,message,'바꾸리 안내',16)
 sys.excepthook=startup_error
-if __name__=='__main__':
+if __name__=='__main__' and not DEVELOPMENT:
     from velopack_bootstrap import bootstrap
     bootstrap()
 
@@ -170,14 +171,14 @@ class QuickPopup(QWidget):
 
 class Window(QWidget):
     def __init__(self):
-        super().__init__(); self.bus=Events(); self.busy=False;self.control=None;self.compression_rows=[];self.job_kind='convert'; self.settings=QSettings('Bakuri','FileConverter')
+        super().__init__(); self.bus=Events(); self.busy=False;self.control=None;self.compression_rows=[];self.job_kind='convert'; self.settings=QSettings('Bakuri',SETTINGS_APP)
         first_run=not self.settings.allKeys() and not QSettings('Bakuri','Python Trial').allKeys()
-        if not self.settings.value('settings_migrated',False,type=bool):
+        if not DEVELOPMENT and not self.settings.value('settings_migrated',False,type=bool):
             legacy=QSettings('Bakuri','Python Trial')
             for key in legacy.allKeys():
                 if not self.settings.contains(key):self.settings.setValue(key,legacy.value(key))
             self.settings.setValue('settings_migrated',True);self.settings.sync()
-        self.setWindowTitle(f'바꾸리 파일 변환기 {VERSION}'); self.resize(840,650); self.setMinimumSize(760,540); self.setObjectName('mainWindow');self.setStyleSheet(stylesheet())
+        self.setWindowTitle(f'바꾸리 파일 변환기 {BUILD_LABEL}'); self.resize(840,650); self.setMinimumSize(760,540); self.setObjectName('mainWindow');self.setStyleSheet(stylesheet())
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0);layout.setSpacing(0)
         toolbar=QFrame();self.toolbar=toolbar;toolbar.setObjectName('toolbar');row=QHBoxLayout(toolbar);row.setContentsMargins(16,16,16,14);row.setSpacing(10)
         add=QPushButton('파일 추가');add.setObjectName('addFiles');add.setIcon(icon('plus'));add.clicked.connect(self.choose);row.addWidget(add)
@@ -189,7 +190,8 @@ class Window(QWidget):
         settings_button.setFixedSize(40,40);self.help_button.setFixedSize(40,40)
         self.help_shortcut=QShortcut('F1',self);self.help_shortcut.activated.connect(self.open_help)
         layout.addWidget(toolbar)
-        self.files=Files();self.files.changed.connect(self.refresh_count);layout.addWidget(self.files,1)
+        self.mode_tabs=QTabBar();self.mode_tabs.setStyleSheet('QTabBar::tab {background:#FFFFFF;color:#60718A;padding:12px 24px;border-bottom:2px solid #E2E8F0;} QTabBar::tab:selected {color:#2E83F2;border-bottom:2px solid #2E83F2;font-weight:600;}');self.mode_tabs.addTab('파일 변환');self.mode_tabs.addTab('파일명 변경');layout.addWidget(self.mode_tabs)
+        self.files=Files(allow_all=True);self.files.changed.connect(self.refresh_count);layout.addWidget(self.files,1)
         options=QFrame();options.setObjectName('options');row=QHBoxLayout(options);row.setContentsMargins(18,14,18,14);row.setSpacing(12)
         row.addWidget(QLabel('출력 형식'))
         self.fmt=QComboBox();self.fmt.setItemDelegate(OutputFormatDelegate(self.fmt));self.fmt.addItems(['PDF','PNG','JPEG','HWPX','DOCX','PPTX','XLSX','용량 축소']);self.fmt.setFixedWidth(150);self.fmt.setToolTip('XLSX 출력은 매크로를 저장하지 않습니다. 원본 파일은 보존됩니다.');row.addWidget(self.fmt);self.compression_profile=QComboBox();add_profiles(self.compression_profile);self.compression_profile.setMinimumWidth(140);self.compression_profile.setMaximumWidth(260);self.compression_profile.setCurrentIndex(self.compression_profile.findData(read_options(self.settings)['profile']));self.compression_profile.hide();row.addWidget(self.compression_profile);row.addStretch()
@@ -203,17 +205,26 @@ class Window(QWidget):
         self.output_folders=[];self.notification_folders=[]
         self.status=QLabel('원본 폴더에 새 파일로 저장');self.status.setObjectName('status');self.status.setWordWrap(True);self.status.linkActivated.connect(self.status_link);row.addWidget(self.status,1)
         self.run=QPushButton('변환 시작  →');self.run.setObjectName('convert');self.run.setMinimumWidth(184);self.run.clicked.connect(self.start);row.addWidget(self.run);layout.addWidget(footer)
+        self.files.setColumnCount(6);self.files.headerItem().setText(4,'변경될 이름');self.files.headerItem().setText(5,'상태');self.files.setColumnWidth(4,250);self.files.setColumnWidth(5,210)
+        from rename_ui import RenamePanel
+        self.rename_panel=RenamePanel(self);layout.insertWidget(layout.count()-2,self.rename_panel)
+        def change_mode(index):
+            self.rename_panel.setVisible(index==1);options.setVisible(index==0);footer.setVisible(index==0)
+            for column in [4,5]:self.files.setColumnHidden(column,index==0)
+            for column in [1,3]:self.files.setColumnHidden(column,index==1)
+            self.rename_panel.refresh()
+        self.mode_tabs.currentChanged.connect(change_mode);change_mode(0)
         app_icon=icon('app');self.setWindowIcon(app_icon)
         self.tray=QSystemTrayIcon(icon('tray'),self); menu=QMenu()
         menu.addAction('열기',lambda:self.open_main('tray')); menu.addAction('설정',self.open_settings); menu.addAction('사용 설명',self.open_help); menu.addSeparator(); menu.addAction('완전 종료',self.quit); self.tray.setContextMenu(menu)
         self.tray.messageClicked.connect(lambda:self.open_folders(self.notification_folders))
         self.tray.activated.connect(lambda reason:self.open_main('tray') if reason==QSystemTrayIcon.Trigger else None); self.tray.show()
         from updater import UpdateController
-        self.updater=UpdateController(self,self.settings)
+        self.updater=UpdateController(self,self.settings,disabled=DEVELOPMENT)
         self.popup=QuickPopup(); self.bus.clicked.connect(self.popup.clicked_at); self.bus.dismiss.connect(self.popup.hide);self.bus.popup_key.connect(self.popup.native_key); self.popup.chosen.connect(self.quick_selected); self.quick_paths=[]
         self.progress_popup=ProgressPopup();self.progress_popup.stop_requested.connect(self.request_stop);self.bus.progress.connect(self.update_progress)
         self.bus.message.connect(self.status.setText); self.bus.error.connect(self.failed); self.bus.done.connect(self.finished); self.bus.selected.connect(self.receive)
-        if sys.platform=='win32' and os.environ.get('BAKURI_DISABLE_SHELL_INTEGRATION')!='1':
+        if sys.platform=='win32' and not DEVELOPMENT and os.environ.get('BAKURI_DISABLE_SHELL_INTEGRATION')!='1':
             from windows import SelectionWatcher,MouseWatcher,migrate_menu,initialize_startup
             try:
                 initialize_startup(self.settings,first_run=first_run)
@@ -287,7 +298,7 @@ class Window(QWidget):
 
     def choose(self):
         if self.busy:return
-        self.files.add_paths(QFileDialog.getOpenFileNames(self,'파일 선택','','지원 파일 ('+' '.join('*'+ext for ext in sorted(SUPPORTED))+')')[0])
+        self.files.add_paths(QFileDialog.getOpenFileNames(self,'파일 선택','','모든 파일 (*);;지원 변환 파일 ('+' '.join('*'+ext for ext in sorted(SUPPORTED))+')')[0])
     def remove(self):
         for i in range(self.files.count()-1,-1,-1):
             if self.files.item(i).checkState(0)==Qt.Checked: self.files.takeItem(i)
@@ -315,7 +326,7 @@ class Window(QWidget):
         self.begin_job(lambda control:compress(paths,control=control,**options),'compress',anchor)
     def begin_job(self,operation,kind,anchor=None):
         if self.busy or self.updater.installing:return
-        self.popup.hide();self.progress_popup.hide();self.busy=True;self.job_kind=kind;self.control=JobControl(self.bus.progress.emit);control=self.control
+        self.mode_tabs.setEnabled(False);self.rename_panel.setEnabled(False);self.popup.hide();self.progress_popup.hide();self.busy=True;self.job_kind=kind;self.control=JobControl(self.bus.progress.emit);control=self.control
         self.compression_rows=[];self.output_folders=[];self.notification_folders=[]
         self.run.setText('작업 중지');self.run.setEnabled(True);self.files.setEnabled(False);self.toolbar.setEnabled(False);self.fmt.setEnabled(False);self.compression_profile.setEnabled(False);self.individual.setEnabled(False);self.merge.setEnabled(False)
         self.status.setText('0% · 작업 준비')
@@ -335,7 +346,7 @@ class Window(QWidget):
         if not self.busy or self.control is None:return
         self.control.cancel();self.run.setText('중지 요청 중');self.run.setEnabled(False);self.progress_popup.stopping();self.status.setText('중지 요청 중 · 현재 처리 단계가 반환되면 중지합니다.')
     def reset(self):
-        self.busy=False;self.control=None;self.run.setEnabled(True);self.files.setEnabled(True);self.toolbar.setEnabled(True);self.fmt.setEnabled(True);self.compression_profile.setEnabled(True);self.individual.setEnabled(True);self.output_changed(self.fmt.currentText());self.progress_popup.hide()
+        self.mode_tabs.setEnabled(True);self.rename_panel.setEnabled(True);self.busy=False;self.control=None;self.run.setEnabled(True);self.files.setEnabled(True);self.toolbar.setEnabled(True);self.fmt.setEnabled(True);self.compression_profile.setEnabled(True);self.individual.setEnabled(True);self.output_changed(self.fmt.currentText());self.progress_popup.hide()
     def failed(self,text):
         self.reset();self.status.setText('변환을 완료하지 못했습니다.');self.show();QMessageBox.warning(self,'변환을 완료하지 못했어요',friendly_error(text)+'\n\n원본과 이미 저장된 결과는 그대로 남아 있습니다.')
     def finished(self,result):
@@ -376,17 +387,17 @@ class Window(QWidget):
         else:self.files.clear();e.accept()
 
 if __name__=='__main__':
-    app=QApplication(sys.argv); app.setQuitOnLastWindowClosed(False)
-    if sys.platform=='win32':
+    app=QApplication(sys.argv);app.setApplicationName('BakuriDevelopment'); app.setQuitOnLastWindowClosed(False)
+    if sys.platform=='win32' and not DEVELOPMENT:
         from windows import apply_install_options
         apply_install_options(sys.argv)
     from PySide6.QtNetwork import QLocalSocket, QLocalServer
-    socket=QLocalSocket(); socket.connectToServer('BakuriPythonTrial')
+    socket=QLocalSocket(); socket.connectToServer(SERVER_NAME)
     paths=sys.argv[sys.argv.index('--add-files')+1:] if '--add-files' in sys.argv else []
     if socket.waitForConnected(300):
         socket.write(json.dumps({'paths':paths,'direct':'--background' not in sys.argv and '--add-files' not in sys.argv}).encode()+b'\n'); socket.waitForBytesWritten(1000); socket.disconnectFromServer(); sys.exit(0)
-    QLocalServer.removeServer('BakuriPythonTrial'); server=QLocalServer()
-    if not server.listen('BakuriPythonTrial'): raise RuntimeError('다른 바꾸리가 실행 중입니다.')
+    QLocalServer.removeServer(SERVER_NAME); server=QLocalServer()
+    if not server.listen(SERVER_NAME): raise RuntimeError('다른 바꾸리가 실행 중입니다.')
     win=Window(); clients=[]
     def accept():
         while server.hasPendingConnections():

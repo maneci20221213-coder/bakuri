@@ -12,8 +12,8 @@ def natural_key(text):
 
 class Files(QTreeWidget):
     changed=Signal()
-    def __init__(self):
-        super().__init__(); self.setColumnCount(4); self.setHeaderLabels(['','미리보기','파일명','용량'])
+    def __init__(self,allow_all=False):
+        super().__init__();self.allow_all=allow_all; self.setColumnCount(4); self.setHeaderLabels(['','미리보기','파일명','용량'])
         self.setRootIsDecorated(False); self.setAlternatingRowColors(False); self.setStyleSheet(stylesheet())
         self.setUniformRowHeights(True); self.setIndentation(0)
 
@@ -65,9 +65,9 @@ class Files(QTreeWidget):
     def add_paths(self,paths):
         existing={os.path.normcase(self.item(i).data(0,Qt.UserRole)) for i in range(self.count())}
         for p in paths:
-            path=Path(p).resolve()
+            path=Path(p).absolute() if self.allow_all else Path(p).resolve()
             key=os.path.normcase(str(path))
-            if path.is_file() and path.suffix.lower() in SUPPORTED and key not in existing:
+            if path.is_file() and (self.allow_all or path.suffix.lower() in SUPPORTED) and key not in existing:
                 existing.add(key)
                 size=path.stat().st_size; label=f'{size/1048576:.1f} MB' if size>=1048576 else f'{size/1024:.1f} KB'
                 item=QTreeWidgetItem(['','',path.name,label]); item.setData(0,Qt.UserRole,str(path)); item.setToolTip(2,str(path))

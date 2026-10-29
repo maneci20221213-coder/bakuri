@@ -91,7 +91,6 @@ internal sealed class InstallWindow : Form {
     private readonly CheckBox desktop;
     private readonly Button install;
     private readonly Button cancel;
-    private readonly Button logs;
     private readonly Label status;
     private bool installing;
     private string phase;
@@ -111,22 +110,20 @@ internal sealed class InstallWindow : Form {
         var title = new Label { Text = "바꾸리를 설치합니다.", AutoSize = true, Location = new Point(24, 24) };
         desktop = new CheckBox { Text = "바탕화면에 바로가기 만들기", Checked = true, AutoSize = true, Location = new Point(24, 67) };
         status = new Label { Text = "작업 중인 바꾸리를 완전 종료한 뒤 설치해 주세요.", AutoSize = false, Location = new Point(24, 105), Size = new Size(402, 80) };
-        logs = new Button { Text = "설치 기록", Enabled = false, Location = new Point(24, 195), Size = new Size(100, 32) };
         install = new Button { Text = "설치", Location = new Point(240, 195), Size = new Size(88, 32) };
         cancel = new Button { Text = "취소", Location = new Point(338, 195), Size = new Size(88, 32) };
         timer = new Timer { Interval = 1000 };
         timer.Tick += (sender, args) => { status.Text = phase + "\n경과 시간: " + (int)elapsed.Elapsed.TotalSeconds + "초"; };
-        logs.Click += (sender, args) => { try { Directory.CreateDirectory(job.LogFolder); Process.Start(new ProcessStartInfo(job.LogFolder) { UseShellExecute = true }); } catch (Exception) { MessageBox.Show(this, "설치 기록 폴더를 열지 못했습니다.", "바꾸리 설치"); } };
         install.Click += async (sender, args) => await Install();
         cancel.Click += (sender, args) => Close();
         FormClosing += (sender, args) => { if (installing) args.Cancel = true; };
         AcceptButton = install; CancelButton = cancel;
-        Controls.AddRange(new Control[] { title, desktop, status, logs, install, cancel });
+        Controls.AddRange(new Control[] { title, desktop, status, install, cancel });
     }
 
     private async Task Install() {
         bool shortcut = desktop.Checked;
-        job = new InstallJob(); logs.Enabled = true;
+        job = new InstallJob();
         installing = true; install.Enabled = false; cancel.Enabled = false; desktop.Enabled = false;
         phase = "설치 파일을 준비하고 있습니다."; status.Text = phase; elapsed.Restart(); timer.Start();
         var progress = new Progress<string>(text => phase = text);
@@ -137,10 +134,10 @@ internal sealed class InstallWindow : Form {
             Result = 0; succeeded = true;
         } catch (TimeoutException) {
             timedOut = true;
-            status.Text = "설치가 3분 안에 끝나지 않았습니다. 설치 기록을 확인해 주세요.\n내부 설치가 계속 실행 중일 수 있으니 설치를 반복하지 마세요.";
+            status.Text = "설치가 3분 안에 끝나지 않았습니다. PC를 다시 시작한 뒤 시도해 주세요.\n내부 설치가 계속 실행 중일 수 있으니 설치를 반복하지 마세요.";
         } catch (Exception error) {
             job.Record(error.ToString());
-            status.Text = error is InvalidOperationException ? error.Message : "설치 또는 프로그램 실행을 완료하지 못했습니다.\n설치 기록을 확인해 주세요.";
+            status.Text = error is InvalidOperationException ? error.Message : "설치 또는 프로그램 실행을 완료하지 못했습니다.\n바꾸리를 완전 종료한 뒤 다시 시도해 주세요.";
         } finally {
             timer.Stop(); elapsed.Stop(); installing = false;
             install.Enabled = !timedOut; cancel.Enabled = true; desktop.Enabled = !timedOut; cancel.Text = "닫기";

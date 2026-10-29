@@ -38,7 +38,6 @@ class SelectionWatcher(threading.Thread):
     def update_settings(self,settings):
         self.enabled=settings.value('hotkey_enabled',True,type=bool)
         self.binding=KEYS.get(settings.value('hotkey','` (백틱)'),KEYS['` (백틱)'])
-    def request_restart(self): self.restart.set()
     def on_press(self,key):
         import win32gui,win32process
         vk=getattr(key,'vk',None) or getattr(getattr(key,'value',None),'vk',None)

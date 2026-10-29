@@ -24,6 +24,12 @@ def stylesheet():
     QPushButton:focus {{ border:2px solid {ACCENT}; padding:8px 14px; }}
     QPushButton:disabled {{ background:#F2F5F9; color:#A4AFBD; border-color:#E5EAF1; }}
     QPushButton#addFiles {{ color:{ACCENT}; border-color:{ACCENT}; font-weight:600; }}
+    QFrame#toolbar QPushButton:focus {{ border:1px solid #DCE3EE; padding:9px 15px; }}
+    QFrame#toolbar QPushButton:hover {{ border-color:#AECDF6; }}
+    QFrame#toolbar QPushButton#addFiles {{ border-color:{ACCENT}; }}
+    QFrame#toolbar QPushButton#settings, QFrame#toolbar QPushButton#help {{ padding:9px; }}
+    QFrame#toolbar QPushButton:pressed {{ border:2px solid {ACCENT}; padding:8px 14px; }}
+    QFrame#toolbar QPushButton#settings:pressed, QFrame#toolbar QPushButton#help:pressed {{ border:2px solid {ACCENT}; padding:8px; }}
     QPushButton#convert {{ background:{ACCENT}; border-color:{ACCENT}; color:white; font-weight:600; padding:11px 24px; }}
     QPushButton#convert:hover {{ background:#2475DF; border-color:#2475DF; }}
     QPushButton#convert:pressed {{ background:#1F68CA; }}

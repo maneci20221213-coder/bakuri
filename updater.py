@@ -46,7 +46,7 @@ class UpdateController(QObject):
         self.checking=False;self.installing=False;self.offered=set();self.worker=None;self.last_check=None
         self.checked.connect(self.on_checked);self.failed.connect(self.on_failed);self.downloaded.connect(self.on_downloaded)
     def request(self,reason):
-        if reason not in {'direct','expanded'} or self.checking or self.installing or self.window.busy:return
+        if reason not in {'direct','expanded','tray'} or self.checking or self.installing or self.window.busy:return
         now=time.monotonic()
         if self.last_check is not None and now-self.last_check<300:return
         self.last_check=now;self.checking=True
@@ -58,7 +58,9 @@ class UpdateController(QObject):
                 if factory is None:factory=make_update_manager
                 manager=factory(url);info=manager.check_for_updates()
                 self.checked.emit((manager,info) if info else None)
-            except Exception as exc:self.failed.emit(friendly_error(exc,'update_check'))
+            except Exception as exc:
+                friendly_error(exc,'update_check')
+                self.checked.emit(None)
         self.worker=threading.Thread(target=work,daemon=True);self.worker.start()
     def on_checked(self,result):
         self.checking=False
@@ -85,7 +87,9 @@ class UpdateController(QObject):
             QApplication.quit()
         except Exception as exc:self.on_failed(friendly_error(exc,'update_install'))
     def on_failed(self,text):
-        was_installing=self.installing;self.checking=False;self.installing=False;self.window.setEnabled(True)
-        text=friendly_error(text,'update_install' if was_installing else 'update_check')
+        was_installing=self.installing;self.checking=False;self.installing=False
+        if not was_installing:return
+        self.window.setEnabled(True)
+        text=friendly_error(text,'update_install')
         self.window.status.setText(text)
         if was_installing:QMessageBox.warning(self.window,'업데이트를 완료하지 못했어요',text)

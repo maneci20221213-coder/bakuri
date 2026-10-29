@@ -189,9 +189,9 @@ class Window(QWidget):
         self.run=QPushButton('변환 시작  →');self.run.setObjectName('convert');self.run.setMinimumWidth(184);self.run.clicked.connect(self.start);row.addWidget(self.run);layout.addWidget(footer)
         app_icon=icon('app');self.setWindowIcon(app_icon)
         self.tray=QSystemTrayIcon(icon('tray'),self); menu=QMenu()
-        menu.addAction('열기',lambda:self.open_main('direct')); menu.addAction('설정',self.open_settings); menu.addAction('사용 설명',self.open_help); menu.addAction('단축키 다시 연결',self.reconnect_hotkey); menu.addSeparator(); menu.addAction('완전 종료',self.quit); self.tray.setContextMenu(menu)
+        menu.addAction('열기',lambda:self.open_main('tray')); menu.addAction('설정',self.open_settings); menu.addAction('사용 설명',self.open_help); menu.addSeparator(); menu.addAction('완전 종료',self.quit); self.tray.setContextMenu(menu)
         self.tray.messageClicked.connect(lambda:self.open_folders(self.notification_folders))
-        self.tray.activated.connect(lambda reason:self.open_main('direct') if reason==QSystemTrayIcon.Trigger else None); self.tray.show()
+        self.tray.activated.connect(lambda reason:self.open_main('tray') if reason==QSystemTrayIcon.Trigger else None); self.tray.show()
         from updater import UpdateController
         self.updater=UpdateController(self,self.settings)
         self.popup=QuickPopup(); self.bus.clicked.connect(self.popup.clicked_at); self.bus.dismiss.connect(self.popup.hide);self.bus.popup_key.connect(self.popup.native_key); self.popup.chosen.connect(self.quick_selected); self.quick_paths=[]
@@ -235,8 +235,6 @@ class Window(QWidget):
     def open_main(self,reason='expanded'):
         self.show();self.raise_();self.activateWindow()
         if hasattr(self,'updater'):self.updater.request(reason)
-    def reconnect_hotkey(self):
-        if hasattr(self,'watcher'): self.watcher.request_restart(); self.status.setText('단축키를 다시 연결합니다.')
     def open_help(self):
         HelpDialog(self).exec()
     def open_settings(self):

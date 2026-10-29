@@ -24,11 +24,32 @@ class HelpTests(unittest.TestCase):
   for phrase in ['원본 파일이 있는 폴더','회색','한 파일로 합쳐서 저장','OCR','용량 축소','완전 종료','잘 안 될 때']:
    self.assertIn(phrase,text)
   self.assertGreater(dialog.text.verticalScrollBar().maximum(),0);dialog.reject()
+ def test_help_tabs_and_removed_repair_actions_and_tray_entry(self):
+  from app import SettingsDialog
+  w=Window();dialog=HelpDialog(w)
+  self.assertEqual([dialog.tabs.tabText(i) for i in range(dialog.tabs.count())],['사용 설명','패치노트'])
+  self.assertIn('0.14.7',dialog.notes.toPlainText())
+  dialog.tabs.setCurrentIndex(1);self.assertEqual(dialog.tabs.currentWidget(),dialog.notes)
+  self.assertNotIn('단축키 다시 연결',[a.text() for a in w.tray.contextMenu().actions()])
+  settings=SettingsDialog(w)
+  self.assertNotIn('우클릭 메뉴 다시 등록',[b.text() for b in settings.findChildren(QPushButton)])
+  with patch.object(w.updater,'request') as check:
+   w.tray.contextMenu().actions()[0].trigger();check.assert_called_once_with('tray')
+  settings.reject();dialog.reject();w.tray.hide();w.hide();w.deleteLater()
+ def test_toolbar_thick_border_ends_on_mouse_release(self):
+  w=Window();w.show();APP.processEvents()
+  button=next(b for b in w.toolbar.findChildren(QPushButton) if b.text()=='이름순 정렬')
+  QTest.mousePress(button,Qt.LeftButton);APP.processEvents()
+  pressed=button.grab().toImage().pixelColor(1,button.height()//2)
+  QTest.mouseRelease(button,Qt.LeftButton);APP.processEvents()
+  released=button.grab().toImage().pixelColor(1,button.height()//2)
+  self.assertEqual(pressed.name(),'#2e83f2');self.assertNotEqual(released.name(),pressed.name())
+  w.tray.hide();w.hide();w.deleteLater()
  def test_developer_readme_retained_and_manual_bundled_in_both_builds(self):
   root=Path(__file__).parent
   self.assertIn('## 빌드·배포',(root/'DEVELOPER-README.md').read_text(encoding='utf-8'))
   self.assertNotIn('py -3.12',(root/'README.md').read_text(encoding='utf-8'))
-  for name in ['build_release.ps1','build_exe.bat']:self.assertIn('USER-GUIDE.md;.',(root/name).read_text(encoding='utf-8'))
+  for name in ['build_release.ps1','build_exe.bat']:self.assertIn('USER-GUIDE.md;.',(root/name).read_text(encoding='utf-8'));self.assertIn('PATCH-NOTES.md;.',(root/name).read_text(encoding='utf-8'))
 
 class UserMessageTests(unittest.TestCase):
  def test_user_messages_hide_technical_details_and_offer_a_next_step(self):

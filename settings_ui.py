@@ -1,6 +1,6 @@
 """Application preferences and their Windows integration."""
 import sys
-from PySide6.QtWidgets import (QDialog,QFormLayout,QCheckBox,QComboBox,QLabel,QPushButton,QDialogButtonBox,QMessageBox)
+from PySide6.QtWidgets import (QDialog,QFormLayout,QCheckBox,QComboBox,QLabel,QDialogButtonBox,QMessageBox)
 from work_ui import add_profiles,read_options
 from user_messages import friendly_error
 
@@ -18,7 +18,6 @@ class SettingsDialog(QDialog):
         else: self.auto.setEnabled(False)
         form.addRow(self.auto)
         self.explorer=QCheckBox('탐색기 우클릭 메뉴 추가'); self.explorer.setChecked(window.settings.value('explorer',True,type=bool)); form.addRow(self.explorer)
-        self.repair_menu=QPushButton('우클릭 메뉴 다시 등록');self.repair_menu.setEnabled(sys.platform=='win32');self.repair_menu.clicked.connect(self.restore_menu);form.addRow(self.repair_menu)
         self.dpi=QComboBox(); self.dpi.addItems(['96','150','200','300']); self.dpi.setCurrentText(str(window.settings.value('dpi',150,type=int))); form.addRow('PDF 이미지 해상도',self.dpi)
         self.image_mode=QComboBox();self.image_mode.addItem('표 배경으로 채우기 (기본)','background');self.image_mode.addItem('표 안에 이미지 넣기','inline');self.image_mode.setCurrentIndex(max(0,self.image_mode.findData(window.settings.value('image_mode','background'))));form.addRow('이미지 → 한글 배치',self.image_mode)
         self.compress_profile=QComboBox();add_profiles(self.compress_profile);self.compress_profile.setCurrentIndex(self.compress_profile.findData(read_options(window.settings)['profile']));form.addRow('해상도 축소 기본값',self.compress_profile)
@@ -27,14 +26,6 @@ class SettingsDialog(QDialog):
         self.compress_direct=QCheckBox('팝업에서 설정창 없이 용량 축소 실행');self.compress_direct.setChecked(window.settings.value('compress_direct',False,type=bool));form.addRow(self.compress_direct)
         self.notify=QCheckBox('변환 완료 알림'); self.notify.setChecked(window.settings.value('notify',True,type=bool)); form.addRow(self.notify)
         buttons=QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel); buttons.accepted.connect(self.save); buttons.rejected.connect(self.reject); form.addRow(buttons)
-    def restore_menu(self):
-        try:
-            from windows import register_menu
-            register_menu(True)
-            self.window.settings.setValue('explorer',True);self.window.settings.sync()
-            self.explorer.setChecked(True)
-            QMessageBox.information(self,'우클릭 메뉴 등록','현재 사용자 계정에 등록했습니다. 탐색기에서 파일을 다시 우클릭해 주세요.')
-        except Exception as exc:QMessageBox.warning(self,'우클릭 메뉴를 추가하지 못했어요',friendly_error(exc,'menu'))
     def save(self):
         try:
             if sys.platform=='win32':

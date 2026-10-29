@@ -68,3 +68,21 @@ class GithubDistributionTests(unittest.TestCase):
    first=manager.worker;manager.request('expanded');self.assertIs(manager.worker,first)
    manager.request('expanded');manager.worker.join(2);self.assertIsNot(manager.worker,first)
   window.close()
+
+class UpdateEntryTests(unittest.TestCase):
+ setUp=UpdateTests.setUp
+ tearDown=UpdateTests.tearDown
+ def test_tray_entry_checks_but_failure_keeps_current_status_without_dialog(self):
+  self.window.status.setText('기존 변환 결과')
+  factory=Mock(side_effect=ConnectionError('offline'))
+  self.updater.factory=factory
+  with patch('updater.feed_url',return_value='https://github.com/example/bakuri'),patch('updater.friendly_error') as log,patch('updater.QMessageBox.warning') as warning:
+   self.updater.request('tray');self.updater.worker.join(2);APP.processEvents()
+   factory.assert_called_once();log.assert_called_once();warning.assert_not_called()
+  self.assertFalse(self.updater.checking);self.assertFalse(self.updater.installing)
+  self.assertEqual(self.window.status.text(),'기존 변환 결과');self.assertTrue(self.window.isEnabled())
+ def test_failed_download_still_warns_and_restores_window(self):
+  self.updater.installing=True;self.window.setEnabled(False)
+  with patch('updater.QMessageBox.warning') as warning:
+   self.updater.on_failed('다운로드 실패');warning.assert_called_once()
+  self.assertFalse(self.updater.installing);self.assertTrue(self.window.isEnabled())

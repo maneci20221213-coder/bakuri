@@ -9,6 +9,7 @@ internal static class VerifyInstaller {
         Application.EnableVisualStyles();
         using (var form = new InstallWindow()) {
             form.Show(); Application.DoEvents();
+            if (form.Controls.OfType<Button>().Any(b => b.Text == "설치 기록")) throw new Exception("Removed log button must not be present");
             var checkbox = form.Controls.OfType<CheckBox>().Single();
             if (!checkbox.Checked || !checkbox.Visible) throw new Exception("Missing default desktop choice");
             checkbox.Checked = false;

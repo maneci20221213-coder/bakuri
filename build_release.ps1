@@ -56,7 +56,7 @@ $Compiler=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 RunChecked { & $Compiler /nologo /target:winexe /optimize+ /platform:anycpu /codepage:65001 /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /win32icon:assets/app.ico "/resource:$($Setups[0].FullName),Bakuri.Setup" /out:Releases\BakuriSetup.exe installer.cs }
 RunChecked { & $Compiler /nologo /target:exe /optimize+ /codepage:65001 /main:VerifyInstaller /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Core.dll /out:verify-installer.exe installer.cs verify_installer.cs }
 RunChecked { & '.\verify-installer.exe' }
-& (Join-Path $PSScriptRoot 'verify_installation.ps1') -Setup $Setups[0].FullName
+& (Join-Path $PSScriptRoot 'verify_installation.ps1') -Setup (Join-Path $PSScriptRoot 'Releases\BakuriSetup.exe')
 # Only expose the installer that offers the shortcut choice.
 Remove-Item $Setups[0].FullName
 if (-not (Test-Path 'Releases\releases.stable.json')) { throw 'Missing stable update feed.' }

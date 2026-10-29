@@ -7,10 +7,12 @@ $Link=Join-Path $Desktop '바꾸리.lnk'
 if (Test-Path $Link) { throw 'Refusing to modify an existing desktop shortcut during verification.' }
 $Child=$null
 try {
- $Process=Start-Process $Setup -ArgumentList @('--silent','--installto',('"'+$Destination+'"')) -Wait -PassThru
+ $Process=Start-Process $Setup -ArgumentList @('--silent','--desktop-shortcut=0','--installto',('"'+$Destination+'"')) -Wait -PassThru
  if ($Process.ExitCode -ne 0) { throw "Installation failed: $($Process.ExitCode)" }
  $Exe=Join-Path $Destination 'current\BakuriFileConverter.exe'
  if (-not (Test-Path $Exe)) { throw 'Installed executable missing.' }
+ Start-Sleep -Seconds 3
+ Get-Process BakuriFileConverter -ErrorAction SilentlyContinue | Stop-Process -Force
  if (Test-Path $Link) { throw 'Installer unexpectedly created a desktop shortcut without a choice.' }
  foreach ($Choice in @('1','0')) {
   $Child=Start-Process $Exe -ArgumentList @('--background',"--desktop-shortcut=$Choice") -PassThru

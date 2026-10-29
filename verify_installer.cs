@@ -20,6 +20,17 @@ internal static class VerifyInstaller {
             form.Controls.OfType<Button>().Single(b => b.Text == "취소").PerformClick();
             if (form.Result != 1 || form.Visible) throw new Exception("Cancel must not install");
         }
+        // A hung child must return control without terminating it or reporting success.
+        using (var child = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c ping -n 4 127.0.0.1 > nul") { UseShellExecute = false, CreateNoWindow = true })) {
+            bool timedOut = false;
+            try { InstallJob.WaitForCompletion(child, 10); }
+            catch (TimeoutException) { timedOut = true; }
+            if (!timedOut || child.HasExited) throw new Exception("Timeout must preserve a running child");
+            child.WaitForExit();
+        }
+        using (var child = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c exit /b 7") { UseShellExecute = false, CreateNoWindow = true })) {
+            if (InstallJob.WaitForCompletion(child, 10000) != 7) throw new Exception("Lost child exit code");
+        }
         Console.WriteLine("Installer choice and cancellation verification passed.");
         return 0;
     }

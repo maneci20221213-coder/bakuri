@@ -23,7 +23,7 @@ class UiTests(unittest.TestCase):
   w=Window(); dialog=SettingsDialog(w)
   self.assertEqual(dialog.key.count(),4)
   self.assertIn('설정',[a.text() for a in w.tray.contextMenu().actions()])
-  self.assertIn('0.14.12',w.windowTitle());self.assertNotIn('시험',w.windowTitle())
+  self.assertIn('0.14.13',w.windowTitle());self.assertNotIn('시험',w.windowTitle())
   w.tray.hide(); w.deleteLater()
 
 class PopupTests(unittest.TestCase):

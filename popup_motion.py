@@ -18,7 +18,7 @@ class PopupMotion(QObject):
         if self.enabled:self.owner.setWindowOpacity(1.)
     def open(self):
         if not self.enabled:return
-        self.owner.layout().activate()
+        self.owner.layout().invalidate();self.owner.layout().activate()
         self.targets={b:QRect(b.geometry()) for b in self.owner.buttons.values() if b.isVisible()}
         self.owner.layout().setEnabled(False);self.closing=False
         self.frame(0.);self.animation.setStartValue(0.);self.animation.setEndValue(1.)
@@ -27,8 +27,11 @@ class PopupMotion(QObject):
     def frame(self,value):
         self.value=max(0.,min(1.,float(value)));center=QPointF(self.owner.rect().center());spread=.65+.35*self.value
         for button,rect in self.targets.items():
-            size=rect.size();position=center+(QPointF(rect.center())-center)*spread
-            button.move(round(position.x()-(size.width()-1)/2),round(position.y()-(size.height()-1)/2))
+            # Translate from the exact target top-left; QRect.center rounds
+            # even-sized rectangles and otherwise causes a final pixel jump.
+            target_center=QPointF(rect.x()+rect.width()/2,rect.y()+rect.height()/2)
+            offset=(center-target_center)*(1.-spread)
+            button.move(rect.x()+round(offset.x()),rect.y()+round(offset.y()))
         self.owner.setWindowOpacity(max(0.,min(1.,self.value*1.5)))
     def close(self,callback=None):
         if self.closing:return
@@ -48,4 +51,6 @@ class PopupMotion(QObject):
             QWidget.hide(self.owner);self.reset()
             if callback:callback()
         else:
-            targets=self.targets;self.reset();self.targets=targets;self.value=1.
+            # Keep the settled layout frozen while visible. Re-enabling it
+            # here applies queued hover/style layout requests after the motion.
+            self.frame(1.)

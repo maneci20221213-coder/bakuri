@@ -44,3 +44,13 @@ class PopupMotionTests(unittest.TestCase):
   from popup_motion import motion_enabled
   with patch('popup_motion.QApplication.platformName',return_value='windows'):
    self.assertTrue(motion_enabled())
+ def test_settled_buttons_do_not_drift_after_layout_events(self):
+  from PySide6.QtCore import QEvent
+  from PySide6.QtTest import QTest
+  popup=self.popup();popup.motion.animation.setCurrentTime(180)
+  expected={key:button.geometry() for key,button in popup.buttons.items() if button.isVisible()}
+  for i in range(5):
+   for button in popup.buttons.values():button.updateGeometry()
+   popup.layout().invalidate();APP.sendEvent(popup,QEvent(QEvent.LayoutRequest));APP.processEvents();QTest.qWait(20)
+   self.assertEqual({key:popup.buttons[key].geometry() for key in expected},expected)
+  for button,rect in popup.motion.targets.items():self.assertEqual(button.geometry(),rect)

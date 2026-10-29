@@ -54,3 +54,23 @@ class PopupHookTests(unittest.TestCase):
    previous=len(keys);foreground[0]=999
    self.assertTrue(watcher.filter_event(0x100,types.SimpleNamespace(vkCode=0x26)));self.assertEqual(len(keys),previous)
    for handler in watcher.log.handlers[:]:handler.close();watcher.log.removeHandler(handler)
+
+class ToggleHotkeyTests(unittest.TestCase):
+ def test_popup_toggle_matches_binding_focus_and_suppresses_repeats(self):
+  class Settings:
+   def value(self,key,default,**kw):return default
+  foreground=[456];dismiss=[];mods=set()
+  gui=types.SimpleNamespace(GetForegroundWindow=lambda:foreground[0],GetClassName=lambda hwnd:'QtWindow' if hwnd==456 else 'OtherWindow')
+  api=types.SimpleNamespace(GetAsyncKeyState=lambda vk:0x8000 if vk in mods else 0)
+  with tempfile.TemporaryDirectory() as d,patch.dict(os.environ,LOCALAPPDATA=d),patch.dict(sys.modules,{'winreg':types.ModuleType('winreg'),'win32gui':gui,'win32process':types.ModuleType('win32process')}),patch.object(ctypes,'windll',types.SimpleNamespace(user32=api),create=True):
+   spec=importlib.util.spec_from_file_location('toggle_hook_module',Path(__file__).with_name('windows.py'));m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+   watcher=m.SelectionWatcher(lambda _:None,lambda _:None,Settings(),dismiss=lambda:dismiss.append(True));watcher.popup_windows=(123,456);watcher.popup_open=True
+   suppressed=[];watcher.listener=types.SimpleNamespace(suppress_event=lambda:suppressed.append(True))
+   for binding in m.KEYS.values():
+    watcher.binding=binding;target,required=binding;mods.clear();mods.update(required)
+    previous=len(dismiss)
+    watcher.filter_event(0x100,types.SimpleNamespace(vkCode=target));watcher.filter_event(0x100,types.SimpleNamespace(vkCode=target));watcher.filter_event(0x101,types.SimpleNamespace(vkCode=target))
+    self.assertEqual(len(dismiss),previous+1);self.assertTrue(watcher.jobs.empty());self.assertFalse(watcher.intercepted)
+   foreground[0]=999;previous=len(dismiss)
+   watcher.filter_event(0x100,types.SimpleNamespace(vkCode=target));self.assertEqual(len(dismiss),previous)
+   for handler in watcher.log.handlers[:]:handler.close();watcher.log.removeHandler(handler)

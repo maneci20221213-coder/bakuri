@@ -47,7 +47,10 @@ class SelectionWatcher(threading.Thread):
         target,mods=self.binding
         if vk!=target: return
         if any(bool(ctypes.windll.user32.GetAsyncKeyState(k)&0x8000)!=(k in mods) for k in (0x10,0x11,0x12)): return
-        hwnd=win32gui.GetForegroundWindow(); klass=win32gui.GetClassName(hwnd)
+        hwnd=win32gui.GetForegroundWindow()
+        if self.popup_open and (not self.popup_windows or hwnd in self.popup_windows):
+            self.dismiss();return True
+        klass=win32gui.GetClassName(hwnd)
         if klass not in ('CabinetWClass','ExploreWClass','Progman','WorkerW'): return
         tid,_=win32process.GetWindowThreadProcessId(hwnd); info=GUIINFO(); info.cbSize=ctypes.sizeof(info)
         if ctypes.windll.user32.GetGUIThreadInfo(tid,ctypes.byref(info)):

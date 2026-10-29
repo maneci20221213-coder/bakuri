@@ -57,11 +57,14 @@ class ReleaseUiTests(unittest.TestCase):
    self.assertEqual(w.fmt.model().item(w.fmt.findText('PPTX')).foreground().color().name(),'#a4afbd')
    w.files.item(1).setCheckState(0,Qt.Unchecked);self.assertTrue(enabled('PPTX'))
    w.files.clear();self.assertTrue(all(w.fmt.model().item(i).isEnabled() for i in range(w.fmt.count())))
- def test_app_and_tray_arrows_are_transparent(self):
+ def test_cycle_icon_has_transparent_background_and_counters(self):
   from theme import ASSETS
   from PIL import Image,ImageChops
   with Image.open(ASSETS/'app.png') as original,Image.open(ASSETS/'tray.png') as tray:
    self.assertIsNone(ImageChops.difference(original,tray).getbbox())
-   for x,y in [(82,49),(65,100),(0,3)]:
-    self.assertEqual(original.getpixel((round(x*1024/140),round((y-3)*1024/140)))[3],0)
-   self.assertEqual(original.getpixel((round(40*1024/140),round(26*1024/140))),(46,131,242,255))
+   for x,y in [(80,55),(102,118),(0,0)]:
+    self.assertEqual(original.getpixel((round(x*1024/160),round(y*1024/160)))[3],0)
+   self.assertEqual(original.getpixel((round(53*1024/160),round(30*1024/160))),(46,131,242,255))
+   colors={color[:3] for count,color in original.getcolors(1024*1024) if color[3]==255}
+   self.assertTrue({(46,131,242),(69,206,244)}<=colors)
+   self.assertFalse(any(min(c)>245 for c in colors))

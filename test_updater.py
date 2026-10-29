@@ -47,10 +47,10 @@ class GithubDistributionTests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as folder:
    p=__import__('pathlib').Path(folder)/'config.json';p.write_text(json.dumps({'source':'github','url':'https://github.com/example/bakuri'}))
    sdk=Mock()
-   with patch('updater.config_path',return_value=p),patch.dict('sys.modules',{'velopack':sdk}):
+   with patch('updater.config_path',return_value=p),patch.dict('sys.modules',{'velopack':sdk}),patch('update_source.PublicReleaseManager') as source:
     url=updater.feed_url();updater.make_update_manager(url)
-   sdk.GithubSource.assert_called_once_with('https://github.com/example/bakuri',access_token=None,prerelease=False)
-   sdk.UpdateManager.assert_called_once_with(sdk.GithubSource.return_value)
+   source.assert_called_once_with('https://github.com/example/bakuri')
+   sdk.GithubSource.assert_not_called();sdk.UpdateManager.assert_not_called()
  def test_rejects_credentials_and_non_repository_github_url(self):
   import updater,json
   from pathlib import Path

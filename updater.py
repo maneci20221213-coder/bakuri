@@ -26,9 +26,9 @@ def make_update_manager(url):
     data=json.loads(config_path().read_text(encoding='utf-8-sig'))
     if data.get('source','http')=='github':
         # Public repository: never embed a GitHub token in the distributed app.
-        source=velopack.GithubSource(url,access_token=None,prerelease=False)
-    else:source=url
-    return velopack.UpdateManager(source)
+        from update_source import PublicReleaseManager
+        return PublicReleaseManager(url)
+    return velopack.UpdateManager(url)
 
 class UpdatePrompt(QDialog):
     def __init__(self,version,parent=None):

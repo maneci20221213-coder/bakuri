@@ -1,0 +1,36 @@
+name: CSharp experiment
+on:
+  push:
+    branches: ['experiment/csharp']
+    paths: ['csharp/**', '.github/workflows/csharp.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: bakuri-csharp-experiment
+  cancel-in-progress: true
+jobs:
+  native:
+    if: github.ref == 'refs/heads/experiment/csharp'
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build, native checks, comparison, and packaged UI smoke check
+        shell: pwsh
+        run: ./csharp/scripts/build.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Bakuri-CSharp-0.16.0-exp.1
+          path: |
+            csharp/artifacts/*.zip
+            csharp/artifacts/*.json
+            csharp/artifacts/*.png
+          if-no-files-found: error
+          retention-days: 30

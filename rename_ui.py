@@ -21,6 +21,8 @@ from PySide6.QtWidgets import (
     QStyledItemDelegate,
     QHeaderView,
     QSizePolicy,
+    QStyle,
+    QStyleOptionViewItem,
 )
 from file_names import FileNameDelegate
 from build_channel import DEVELOPMENT
@@ -31,14 +33,25 @@ from bakuri.domain.models import RenameOptions
 
 
 class TextDelegate(FileNameDelegate):
+    def paint(self, painter, option, index):
+        if option.state & QStyle.State_Editing:
+            opt = QStyleOptionViewItem(option)
+            self.initStyleOption(opt, index)
+            opt.text = ""
+            opt.widget.style().drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
+            return
+        super().paint(painter, option, index)
+
     def createEditor(self, parent, option, index):
-        return (
-            super().createEditor(parent, option, index)
-            if index.column() in {4, 6}
-            and self.parent().window().mode_tabs.currentIndex() == 1
-            and not self.parent().window().busy
-            else None
-        )
+        if (
+            index.column() not in {4, 6}
+            or self.parent().window().mode_tabs.currentIndex() != 1
+            or self.parent().window().busy
+        ):
+            return None
+        editor = super().createEditor(parent, option, index)
+        editor.setStyleSheet("QLineEdit {background:#FFFFFF;color:#26354A;}")
+        return editor
 
 
 def positions(combo):
@@ -77,11 +90,11 @@ class RenamePanel(QWidget):
         self.files.setItemDelegate(TextDelegate(self.files))
         self.files.headerItem().setToolTip(
             4,
-            "두 번 클릭해 직접 수정하거나, 셀 선택 후 Ctrl+V로 한 열을 붙여넣으세요. 확장자는 유지합니다. 빈 값은 자동 이름으로 돌아갑니다.",
+            "한 번 클릭해 직접 수정하거나, 셀 선택 후 Ctrl+V로 한 열을 붙여넣으세요. 확장자는 유지합니다. 빈 값은 자동 이름으로 돌아갑니다.",
         )
         self.files.headerItem().setToolTip(
             6,
-            "두 번 클릭해 수정 · Ctrl+V로 선택 셀부터 체크한 파일에 한 줄씩 붙여넣기 · 빈 줄은 위 문구로 채움",
+            "한 번 클릭해 수정 · Ctrl+V로 선택 셀부터 체크한 파일에 한 줄씩 붙여넣기 · 빈 줄은 위 문구로 채움",
         )
         self.files.header().setSectionResizeMode(5, QHeaderView.ResizeToContents)
         layout = QVBoxLayout(self)
@@ -128,7 +141,7 @@ class RenamePanel(QWidget):
         self.digits.setRange(1, 8)
         self.digits.setValue(1)
         self.digits.setAlignment(Qt.AlignCenter)
-        self.digits.setFixedWidth(72)
+        self.digits.setFixedWidth(96)
         self.number_position = QComboBox()
         positions(self.number_position)
         self.number_position.setCurrentIndex(1)
@@ -160,10 +173,10 @@ class RenamePanel(QWidget):
 
         self.separator.setFixedWidth(160)
         line = QHBoxLayout()
-        line.setSpacing(12)
+        line.setSpacing(24)
         line.addWidget(parameter("시작 번호", self.start))
         line.addWidget(parameter("자릿수", self.digits))
-        line.addWidget(self.number_position, 1)
+        line.addWidget(parameter("추가할 위치", self.number_position), 1)
         line.addWidget(self.number_marker, 1)
         line.addWidget(parameter("구분자", self.separator))
         form.addRow(self.number_enabled, line)

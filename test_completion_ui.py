@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 from PySide6.QtCore import QSettings, Qt
-from PySide6.QtWidgets import QApplication, QFormLayout
+from PySide6.QtWidgets import QApplication, QFormLayout, QLineEdit
 from PySide6.QtTest import QTest
 from app import Window
 
@@ -215,9 +215,11 @@ class CompletionUiTests(unittest.TestCase):
             QTest.qWait(20)
             self.assertEqual(p.start.alignment(), Qt.AlignCenter)
             self.assertEqual(p.digits.alignment(), Qt.AlignCenter)
+            self.assertEqual(p.start.width(), p.digits.width())
             for control, name in [
                 (p.start, "시작 번호"),
                 (p.digits, "자릿수"),
+                (p.number_position, "추가할 위치"),
                 (p.separator, "구분자"),
             ]:
                 caption = control.parentWidget().layout().itemAt(0).widget()
@@ -225,3 +227,30 @@ class CompletionUiTests(unittest.TestCase):
                 gap = control.geometry().left() - caption.geometry().right()
                 self.assertGreater(gap, 0)
                 self.assertLessEqual(gap, 8)
+
+    def test_single_click_edits_both_text_columns_without_underlying_text(self):
+        w = self.window
+        path = Path(self.temp.name) / "original.pdf"
+        path.write_bytes(b"fixture")
+        w.files.add_paths([str(path)])
+        w.show()
+        w.mode_tabs.setCurrentIndex(1)
+        w.rename_panel.text_enabled.setChecked(True)
+        QTest.qWait(30)
+        files = w.files
+        for column in (4, 6):
+            item = files.item(0)
+            item.setText(6, "existing text")
+            files.scrollToItem(item)
+            index = files.model().index(0, column)
+            files.scrollTo(index)
+            QTest.qWait(20)
+            QTest.mouseClick(files.viewport(), Qt.LeftButton, pos=files.visualRect(index).center())
+            APP.processEvents()
+            editor = APP.focusWidget()
+            self.assertIsInstance(editor, QLineEdit)
+            self.assertIn("background:#FFFFFF", editor.styleSheet())
+            editor.setText("edited")
+            QTest.keyClick(editor, Qt.Key_Return)
+            APP.processEvents()
+            self.assertTrue(item.text(column).startswith("edited"))

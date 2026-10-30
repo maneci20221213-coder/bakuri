@@ -9,7 +9,7 @@ import tempfile
 import win32gui
 from PySide6.QtCore import QSettings, QPoint, Qt
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication, QFormLayout
+from PySide6.QtWidgets import QApplication, QFormLayout, QLineEdit
 from PySide6.QtTest import QTest
 from app import Window
 
@@ -46,13 +46,31 @@ with tempfile.TemporaryDirectory() as directory:
         panel = window.rename_panel
         assert panel.start.alignment() == Qt.AlignCenter
         assert panel.digits.alignment() == Qt.AlignCenter
-        for control in [panel.start, panel.digits, panel.separator]:
+        assert panel.start.width() == panel.digits.width()
+        for control in [panel.start, panel.digits, panel.number_position, panel.separator]:
             caption = control.parentWidget().layout().itemAt(0).widget()
             assert 0 < control.geometry().left() - caption.geometry().right() <= 8
         assert panel.message.palette().color(QPalette.WindowText).name() == "#718096"
         assert abs(panel.message.geometry().center().y() - panel.run.geometry().center().y()) <= 1
         assert panel.grab().toImage().pixelColor(QPoint(5, 5)).name() == "#ffffff"
         window.grab().save(str(output / "native-rename-preview.png"))
+        panel.text_enabled.setChecked(True)
+        window.files.item(0).setText(6, "기존에 입력한 문자열")
+        for column in (4, 6):
+            index = window.files.model().index(0, column)
+            window.files.scrollTo(index)
+            QTest.qWait(30)
+            QTest.mouseClick(window.files.viewport(), Qt.LeftButton,
+                             pos=window.files.visualRect(index).center())
+            QTest.qWait(30)
+            editor = app.focusWidget()
+            assert isinstance(editor, QLineEdit), "Single click did not open editor"
+            editor.setText("편집 중")
+            editor.deselect()
+            window.grab().save(str(output / f"native-edit-column-{column}.png"))
+            QTest.keyClick(editor, Qt.Key_Return)
+            QTest.qWait(30)
+        print("Native single-click editing passed for both text columns.")
         before = win32gui.GetForegroundWindow()
         window.show_completion(
             "2개 저장 완료\n12.00 MB → 4.00 MB · 8.00 MB 절감(66.7%)", [directory]

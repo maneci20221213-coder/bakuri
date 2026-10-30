@@ -325,3 +325,13 @@ class ReorderTests(unittest.TestCase):
         QTest.mouseRelease(self.view.viewport(), Qt.LeftButton, Qt.NoModifier, target)
         rows = [self.view.indexOfTopLevelItem(item) for item in self.original[:4]]
         self.assertEqual(rows, list(range(rows[0], rows[0] + 4)))
+
+    def test_multiple_file_destination_box_has_one_row_height(self):
+        for indexes in ([1], [1, 2], [1, 2, 3, 4]):
+            self.select(indexes)
+            self.view.reorder.show_gap()
+            gap = self.view.reorder.gap
+            self.assertTrue(gap.isVisible())
+            self.assertEqual(gap.height(), self.view.visualItemRect(self.original[1]).height())
+            self.assertEqual(gap.text(), f"{len(indexes)}개 파일을 이 위치로 이동")
+            self.view.reorder.finish()

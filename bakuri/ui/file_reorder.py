@@ -84,14 +84,12 @@ class FileReorder:
         if not self.active:
             return
         view = self.view
-        # One contiguous placeholder, clipped to the viewport, masks the moving block.
+        # Show one row-sized destination marker regardless of the selected count.
         rows = sorted(view.indexOfTopLevelItem(item) for item in self.moving)
         if not rows or rows != list(range(rows[0], rows[0] + len(rows))):
             self.gap.hide()
             return
         rect = view.visualItemRect(self.moving[0])
-        for item in self.moving[1:]:
-            rect = rect.united(view.visualItemRect(item))
         rect.setLeft(1)
         rect.setRight(view.viewport().width() - 2)
         rect = rect.intersected(view.viewport().rect())

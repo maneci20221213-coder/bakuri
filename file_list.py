@@ -298,9 +298,22 @@ class Files(QTreeWidget):
                     self.press_modifiers,
                 )
                 super().mousePressEvent(press)
+        origin = self.drag_origin
         self.drag_origin = None
         self.drag_selection = ()
         super().mouseReleaseEvent(event)
+        point = event.position().toPoint()
+        index = self.indexAt(point)
+        if (
+            event.button() == Qt.LeftButton
+            and event.modifiers() == Qt.NoModifier
+            and origin is not None
+            and (point - origin).manhattanLength() < QApplication.startDragDistance()
+            and index.column() in {4, 6}
+            and self.selectedItems() == [self.itemFromIndex(index)]
+        ):
+            # Start editing only after a click; pressing/moving still reorders rows.
+            self.edit(index)
 
     def finish_reorder(self, commit, point=None):
         if self.reorder.active:

@@ -72,7 +72,7 @@ class DevelopmentUiTests(unittest.TestCase):
  def test_completion_summary_savings_and_last_result_without_alert(self):
   rows=[dict(source='a.pdf',output='out.pdf',before=10_000_000,after=4_000_000,status='저장 완료',detail=''),dict(source='b.pdf',output='',before=90_000_000,after=90_000_000,status='실패',detail='')]
   w=self.w;w.settings.setValue('notify',True)
-  with patch.object(w.tray,'showMessage') as notify,patch('app.QMessageBox.warning') as warning:
+  with patch.object(w.tray,'showMessage') as notify,patch('bakuri.ui.main_window.QMessageBox.warning') as warning:
    w.finished(dict(paths=['out.pdf'],rows=rows,kind='compress',outcome='done',error=''))
    text=notify.call_args.args[1];self.assertIn('10.00 MB → 4.00 MB',text);self.assertIn('6.00 MB 절감(60.0%)',text);self.assertIn('실패 1개',text);warning.assert_not_called()
    self.assertEqual(w.last_result['rows'],rows);self.assertTrue(w.tray_result_action.isEnabled())

@@ -15,7 +15,7 @@ class HelpTests(unittest.TestCase):
   w=Window();w.show();w.activateWindow();APP.processEvents()
   settings=w.findChild(QPushButton,'settings')
   self.assertEqual(w.help_button.text(),'?');self.assertGreaterEqual(w.help_button.x(),settings.geometry().right())
-  with patch('app.HelpDialog') as dialog,patch.object(w.updater,'request') as check:
+  with patch('bakuri.ui.main_window.HelpDialog') as dialog,patch.object(w.updater,'request') as check:
    QTest.mouseClick(w.help_button,Qt.LeftButton);QTest.keyClick(w,Qt.Key_F1)
    self.assertEqual(dialog.return_value.exec.call_count,2);check.assert_not_called()
   w.tray.hide();w.hide();w.deleteLater()
@@ -80,7 +80,7 @@ class UserMessageTests(unittest.TestCase):
    logger.handlers=old
  def test_job_result_dialog_never_shows_raw_exception(self):
   w=Window()
-  with patch('app.QMessageBox.warning') as warning,patch('user_messages.log_error'):
+  with patch('bakuri.ui.main_window.QMessageBox.warning') as warning,patch('user_messages.log_error'):
    w.finished(dict(paths=[],rows=[],outcome='failed',error='COM SECRET trace',kind='convert'))
    warning.assert_not_called();self.assertNotIn('SECRET',w.last_result['summary']);self.assertIn('원본',w.last_result['summary'])
   w.tray.hide();w.hide();w.deleteLater()

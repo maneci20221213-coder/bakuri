@@ -33,3 +33,7 @@ GitHub의 Actions → Windows installer and GitHub Release → Run workflow에�
 
 ## 라이선스·소스
 앱 소스는 AGPL-3.0-or-later로 제공합니다. PyMuPDF는 AGPL 조건으로 사용합니다. 제3자 구성요소의 조건과 고지는 LICENSES/ 및 배포 패키지의 third-party-notices/를 참고하세요. 대응 소스와 라이브러리 소스 안내는 SOURCE-NOTICE.md에 있습니다. 소스 공개가 한글 오토메이션의 별도 상업 이용 승인을 대신하지 않습니다.
+
+## 개발판 코드 구조
+
+개발판 0.15.0-dev.8부터 기능별 소유 모듈과 불변 작업 요청·결과를 분리했습니다. 수정 전에 [AGENTS.md](AGENTS.md)를 참고하고 `python tools/context.py <기능>`으로 필요한 파일만 찾으세요. 구조 변경 시 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)를 확인하세요. 개발 도구는 `requirements-dev.txt`에 따로 두었습니다.

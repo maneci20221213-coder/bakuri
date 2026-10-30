@@ -59,7 +59,7 @@ class NameDisplayTests(unittest.TestCase):
 class DeveloperHotkeyTests(unittest.TestCase):
  def test_developer_starts_selection_and_mouse_hooks_without_registry_changes(self):
   fake=types.ModuleType('windows');fake.SelectionWatcher=Mock();fake.MouseWatcher=Mock();fake.initialize_startup=Mock();fake.migrate_menu=Mock()
-  with patch.dict('sys.modules',{'windows':fake}),patch.dict(os.environ,BAKURI_DISABLE_SHELL_INTEGRATION='0'),patch('app.sys.platform','win32'):
+  with patch.dict('sys.modules',{'windows':fake}),patch.dict(os.environ,BAKURI_DISABLE_SHELL_INTEGRATION='0'),patch('bakuri.ui.main_window.sys.platform','win32'):
    w=Window()
    try:
     fake.SelectionWatcher.return_value.start.assert_called_once();fake.MouseWatcher.return_value.start.assert_called_once()

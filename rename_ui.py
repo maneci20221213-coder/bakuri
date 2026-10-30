@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from PySide6.QtCore import Qt,QStandardPaths
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QLineEdit,QLabel,QSpinBox,QPushButton,QMessageBox,QFormLayout,QComboBox,QCheckBox,QApplication,QStyledItemDelegate)
+from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QLineEdit,QLabel,QSpinBox,QPushButton,QMessageBox,QFormLayout,QComboBox,QCheckBox,QApplication,QStyledItemDelegate,QHeaderView)
 from rename_engine import preview,apply,undo,fill_down,_text_lines
 
 class TextDelegate(QStyledItemDelegate):
@@ -17,31 +17,33 @@ class RenamePanel(QWidget):
     def __init__(self,window):
         super().__init__();self.window=window;self.files=window.files;self.rows=[]
         self.journal=Path(QStandardPaths.writableLocation(QStandardPaths.GenericDataLocation))/'BakuriDevelopment'/'rename-history.json'
-        self.files.setColumnCount(7);self.files.headerItem().setText(6,'붙임 문구');self.files.setColumnWidth(6,210);self.files.setItemDelegate(TextDelegate(self.files))
+        self.files.setColumnCount(7);self.files.headerItem().setText(6,'추가할 문자열');self.files.setColumnWidth(6,210);self.files.setItemDelegate(TextDelegate(self.files))
         self.files.headerItem().setToolTip(4,'두 번 클릭해 직접 수정하거나, 셀 선택 후 Ctrl+V로 한 열을 붙여넣으세요. 확장자는 유지합니다. 빈 값은 자동 이름으로 돌아갑니다.')
         self.files.headerItem().setToolTip(6,'두 번 클릭해 수정 · Ctrl+V로 선택 셀부터 체크한 파일에 한 줄씩 붙여넣기 · 빈 줄은 위 문구로 채움')
-        layout=QVBoxLayout(self);form=QFormLayout();layout.addLayout(form)
-        self.find=QLineEdit();self.replace=QLineEdit();line=QHBoxLayout();line.addWidget(self.find);line.addWidget(QLabel('→'));line.addWidget(self.replace);form.addRow('찾아 바꾸기',line)
+        self.files.header().setSectionResizeMode(5,QHeaderView.ResizeToContents)
+        layout=QVBoxLayout(self);layout.setContentsMargins(20,12,20,12)
+        form=QFormLayout();form.setLabelAlignment(Qt.AlignLeft|Qt.AlignVCenter);form.setVerticalSpacing(8);form.setHorizontalSpacing(14);layout.addLayout(form)
+        self.find=QLineEdit();self.replace=QLineEdit();line=QHBoxLayout();line.setSpacing(8);line.addWidget(self.find);line.addWidget(QLabel('→'));line.addWidget(self.replace);form.addRow('찾아 바꾸기',line)
         self.string=QLineEdit();self.string_position=QComboBox();positions(self.string_position)
         self.string_marker=QLineEdit();self.string_marker.setPlaceholderText('처음 일치하는 기준 문자');self.string_marker.hide()
-        line=QHBoxLayout();line.addWidget(self.string,1);line.addWidget(self.string_position);line.addWidget(self.string_marker);form.addRow('문자열 추가',line)
-        self.base=QLineEdit();self.base.setPlaceholderText('비우면 기존 이름 유지 · 입력하면 번호 추가가 켜집니다.');form.addRow('이름 통일',self.base)
-        self.number_enabled=QCheckBox('번호 추가');self.start=QSpinBox();self.start.setRange(0,999999);self.start.setValue(1);self.digits=QSpinBox();self.digits.setRange(1,8);self.digits.setValue(1)
+        self.text_enabled=QCheckBox('파일별 문구')
+        line=QHBoxLayout();line.setSpacing(8);line.addWidget(self.string,1);line.addWidget(self.text_enabled);line.addWidget(self.string_position);line.addWidget(self.string_marker);form.addRow('문자열 추가',line)
+        self.base=QLineEdit();self.base.setPlaceholderText('비우면 기존 이름 유지 · 입력하면 연번 추가가 켜집니다.');form.addRow('이름 통일',self.base)
+        self.number_enabled=QCheckBox('연번 추가');self.start=QSpinBox();self.start.setRange(0,999999);self.start.setValue(1);self.digits=QSpinBox();self.digits.setRange(1,8);self.digits.setValue(1)
         self.number_position=QComboBox();positions(self.number_position);self.number_position.setCurrentIndex(1)
+        self.number_enabled.setMinimumHeight(40)
         self.number_marker=QLineEdit();self.number_marker.setPlaceholderText('처음 일치하는 기준 문자');self.number_marker.hide()
         self.separator=QComboBox()
         for label,value in [('밑줄 _','_'),('하이픈 -','-'),('공백',' '),('마침표 .','.'),('없음','')]:self.separator.addItem(label,value)
-        line=QHBoxLayout();line.addWidget(self.number_enabled);line.addWidget(QLabel('시작'));line.addWidget(self.start);line.addWidget(QLabel('자리'));line.addWidget(self.digits);line.addWidget(self.number_position);line.addWidget(self.number_marker);line.addWidget(QLabel('구분자'));line.addWidget(self.separator);form.addRow('번호 / 구분자',line)
-        self.text_enabled=QCheckBox('파일별 문구');self.fill=QPushButton('빈 문구 채우기');self.clear=QPushButton('선택 문구 비우기');self.text_position=QComboBox();positions(self.text_position)
-        self.text_marker=QLineEdit();self.text_marker.setPlaceholderText('처음 일치하는 기준 문자');self.text_marker.hide()
-        self.replace_name=QCheckBox('문구를 새 이름으로 사용')
-        line=QHBoxLayout();line.addWidget(self.text_enabled);line.addWidget(self.fill);line.addWidget(self.clear);line.addWidget(self.text_position);line.addWidget(self.text_marker);line.addWidget(self.replace_name);form.addRow('',line)
+        line=QHBoxLayout();line.setSpacing(8);line.addWidget(QLabel('시작 번호'));line.addWidget(self.start);line.addWidget(QLabel('자릿수'));line.addWidget(self.digits);line.addWidget(self.number_position);line.addWidget(self.number_marker);line.addWidget(QLabel('구분자'));line.addWidget(self.separator);form.addRow(self.number_enabled,line)
+        self.fill=QPushButton('빈 문구 채우기');self.clear=QPushButton('선택 문구 비우기')
+        self.text_tools=QWidget();tools=QHBoxLayout(self.text_tools);tools.setContentsMargins(0,0,0,0);tools.addWidget(self.fill);tools.addWidget(self.clear);tools.addStretch();form.addRow('',self.text_tools)
         self.message=QLabel();self.message.setWordWrap(True);layout.addWidget(self.message)
-        line=QHBoxLayout();self.restore=QPushButton('마지막 변경 되돌리기');self.run=QPushButton('이름 변경 적용');self.run.setObjectName('convert');line.addWidget(self.restore);line.addStretch();line.addWidget(self.run);layout.addLayout(line)
+        line=QHBoxLayout();line.setSpacing(8);self.restore=QPushButton('마지막 변경 되돌리기');self.run=QPushButton('이름 변경 적용');self.run.setObjectName('convert');line.addWidget(self.restore);line.addStretch();line.addWidget(self.run);layout.addLayout(line)
         self.base.textChanged.connect(self.base_changed)
-        for field in [self.find,self.replace,self.string,self.string_marker,self.number_marker,self.text_marker]:field.textChanged.connect(self.refresh)
-        for combo in [self.number_position,self.text_position,self.string_position,self.separator]:combo.currentIndexChanged.connect(self.refresh)
-        for check in [self.number_enabled,self.replace_name,self.text_enabled]:check.toggled.connect(self.refresh)
+        for field in [self.find,self.replace,self.string,self.string_marker,self.number_marker]:field.textChanged.connect(self.refresh)
+        for combo in [self.number_position,self.string_position,self.separator]:combo.currentIndexChanged.connect(self.refresh)
+        for check in [self.number_enabled,self.text_enabled]:check.toggled.connect(self.refresh)
         self.start.valueChanged.connect(self.refresh);self.digits.valueChanged.connect(self.refresh);self.files.changed.connect(self.refresh)
         self.run.clicked.connect(self.execute);self.restore.clicked.connect(self.undo);self.fill.clicked.connect(self.fill_cells);self.clear.clicked.connect(lambda:self.assign_values(['']*len(self.files.checked_paths())))
         self.files.itemChanged.connect(self.cell_changed)
@@ -93,11 +95,11 @@ class RenamePanel(QWidget):
     def refresh(self,*args):
         active=self.text_enabled.isChecked()
         self.files.setColumnHidden(6,self.window.mode_tabs.currentIndex()!=1 or not active)
-        for control in [self.fill,self.clear,self.text_position,self.replace_name]:control.setEnabled(active)
+        self.string.setEnabled(not active);self.text_tools.setVisible(active);self.string_position.setToolTip('파일별 문자열을 붙일 위치' if active else '공통 문자열을 붙일 위치')
         self.string_marker.setVisible(self.string_position.currentData() in {'before_marker','after_marker'})
-        self.number_marker.setVisible(self.number_position.currentData() in {'before_marker','after_marker'});self.text_marker.setVisible(self.text_position.currentData() in {'before_marker','after_marker'} and active and not self.replace_name.isChecked());self.text_position.setEnabled(active and not self.replace_name.isChecked())
+        self.number_marker.setVisible(self.number_position.currentData() in {'before_marker','after_marker'})
         values={self.files.item(i).data(0,Qt.UserRole):self.files.item(i).text(6) for i in range(self.files.count())}
-        self.rows=preview(self.files.checked_paths(),find=self.find.text(),replace=self.replace.text(),string=self.string.text(),string_position=self.string_position.currentData(),string_marker=self.string_marker.text(),manual_names={self.files.item(i).data(0,Qt.UserRole):self.files.item(i).data(4,Qt.UserRole) for i in range(self.files.count()) if self.files.item(i).data(4,Qt.UserRole) is not None},base=self.base.text(),start=self.start.value(),digits=self.digits.value(),number_enabled=self.number_enabled.isChecked(),number_position=self.number_position.currentData(),number_marker=self.number_marker.text(),separator=self.separator.currentData(),text_by_source=values if active else {},text_position=self.text_position.currentData(),text_marker=self.text_marker.text(),text_mode='replace' if self.replace_name.isChecked() else 'insert')
+        self.rows=preview(self.files.checked_paths(),find=self.find.text(),replace=self.replace.text(),string=self.string.text() if not active else '',string_position=self.string_position.currentData(),string_marker=self.string_marker.text(),manual_names={self.files.item(i).data(0,Qt.UserRole):self.files.item(i).data(4,Qt.UserRole) for i in range(self.files.count()) if self.files.item(i).data(4,Qt.UserRole) is not None},base=self.base.text(),start=self.start.value(),digits=self.digits.value(),number_enabled=self.number_enabled.isChecked(),number_position=self.number_position.currentData(),number_marker=self.number_marker.text(),separator=self.separator.currentData(),text_by_source=values if active else {},text_position=self.string_position.currentData(),text_marker=self.string_marker.text())
         by_source={r['source']:r for r in self.rows};self.files.blockSignals(True)
         try:
             for i in range(self.files.count()):
@@ -110,7 +112,7 @@ class RenamePanel(QWidget):
         try:state=json.loads(self.journal.read_text(encoding='utf-8')).get('state','')
         except (OSError,ValueError):pass
         self.restore.setEnabled(state=='complete' and not self.window.busy)
-        self.message.setText(f'{count}개 변경 예정 · 오류 {errors}개 · 확장자 유지 · 문구 → 번호 → 문자열 순서 · 직접 입력한 이름 우선'+(' · 미완료 기록을 먼저 확인해 주세요.' if state in {'working','recovery_needed'} else ''))
+        self.message.setText(f'{count}개 변경 예정 · 오류 {errors}개'+(' · 미완료 기록을 먼저 확인해 주세요.' if state in {'working','recovery_needed'} else ''))
         if state in {'working','recovery_needed'}:self.run.setEnabled(False)
     def update_paths(self,entries):
         mapping={e['original']:e['current'] for e in entries};self.files.blockSignals(True)

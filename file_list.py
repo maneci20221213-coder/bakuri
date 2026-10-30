@@ -17,7 +17,8 @@ class Files(QTreeWidget):
         self.setRootIsDecorated(False); self.setAlternatingRowColors(False); self.setStyleSheet(stylesheet())
         self.setUniformRowHeights(True); self.setIndentation(0)
 
-        self.setColumnWidth(0,84); self.setColumnWidth(1,100); self.setColumnWidth(3,115); self.header().setSectionResizeMode(2,QHeaderView.Stretch)
+        self.header().setStretchLastSection(False); self.header().setSectionResizeMode(QHeaderView.Interactive)
+        self.setColumnWidth(0,84); self.setColumnWidth(1,100); self.setColumnWidth(2,420); self.setColumnWidth(3,115)
         self.setIconSize(QSize(34,38)); self.setAcceptDrops(True); self.setDragDropMode(QAbstractItemView.InternalMove)
         self.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.setContextMenuPolicy(Qt.CustomContextMenu); self.customContextMenuRequested.connect(self.context_menu)

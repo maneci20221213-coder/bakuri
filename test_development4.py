@@ -64,3 +64,34 @@ class RenameListTests(unittest.TestCase):
   self.panel.text_enabled.setChecked(True);files=self.w.files;item=files.item(0);item.setText(6,'앞');files.setCurrentItem(item,6);files.editItem(item,6);APP.processEvents()
   editor=APP.focusWidget();self.assertIsInstance(editor,QLineEdit);editor.deselect();editor.setCursorPosition(len(editor.text()));APP.clipboard().setText('뒤');QTest.keyClick(editor,Qt.Key_V,Qt.ControlModifier);QTest.keyClick(editor,Qt.Key_Return);APP.processEvents()
   self.assertEqual(item.text(6),'앞뒤');self.assertEqual(files.item(1).text(6),'')
+
+ def test_independent_column_widths_and_compact_status(self):
+  files=self.w.files;self.panel.text_enabled.setChecked(True);APP.processEvents()
+  self.assertEqual(files.headerItem().text(6),'추가할 문자열')
+  widths={column:files.columnWidth(column) for column in [2,4,5,6]}
+  self.assertLess(widths[5],150)
+  files.header().resizeSection(6,widths[6]+90);APP.processEvents()
+  self.assertEqual(files.columnWidth(6),widths[6]+90)
+  for column in [2,4,5]:self.assertEqual(files.columnWidth(column),widths[column])
+  files.header().resizeSection(2,widths[2]+100);APP.processEvents()
+  self.assertEqual(files.columnWidth(2),widths[2]+100);self.assertEqual(files.columnWidth(4),widths[4]);self.assertEqual(files.columnWidth(6),widths[6]+90)
+  self.w.mode_tabs.setCurrentIndex(0);APP.processEvents();before=files.columnWidth(3);files.header().resizeSection(2,600);APP.processEvents();self.assertEqual(files.columnWidth(3),before)
+ def test_file_strings_share_position_and_suspend_common_string(self):
+  panel=self.panel;panel.string.setText('공통');panel.string_position.setCurrentIndex(1)
+  self.assertEqual(self.w.files.item(0).text(4),'a공통.PDF')
+  panel.assign_values(['하나','둘','셋','넷']);panel.text_enabled.setChecked(True)
+  self.assertFalse(panel.string.isEnabled());self.assertEqual(self.w.files.item(0).text(4),'a하나.PDF')
+  panel.string_position.setCurrentIndex(0);self.assertEqual(self.w.files.item(0).text(4),'하나a.PDF')
+  panel.text_enabled.setChecked(False);self.assertTrue(panel.string.isEnabled());self.assertEqual(panel.string.text(),'공통');self.assertEqual(self.w.files.item(0).text(4),'공통a.PDF')
+ def test_shared_marker_position_with_per_file_strings(self):
+  panel=self.panel;panel.assign_values(['첫째','둘째','셋째','넷째']);panel.text_enabled.setChecked(True)
+  panel.string_position.setCurrentIndex(3);panel.string_marker.setText('a')
+  self.assertEqual(self.w.files.item(0).text(4),'a첫째.PDF');self.assertTrue(panel.string_marker.isVisible())
+  panel.text_enabled.setChecked(False);panel.string.setText('공통');self.assertEqual(self.w.files.item(0).text(4),'a공통.PDF')
+ def test_simple_summary_and_shared_row_layout(self):
+  panel=self.panel;self.assertEqual(panel.message.text(),'0개 변경 예정 · 오류 0개')
+  self.assertFalse(hasattr(panel,'replace_name'));self.assertFalse(hasattr(panel,'text_position'))
+  self.assertGreaterEqual(panel.layout().contentsMargins().left(),20)
+  panel.text_enabled.setChecked(True);APP.processEvents()
+  self.assertGreater(panel.text_enabled.geometry().left(),panel.string.geometry().right())
+  self.assertGreater(panel.string_position.geometry().left(),panel.text_enabled.geometry().right())

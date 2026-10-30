@@ -36,8 +36,8 @@ public sealed class OfficeEngine : IDisposable {
         }else if(Capabilities.Sheets.Contains(ext)) {
             dynamic app=App("Excel.Application");try {
                 if(ext is ".csv" or ".tsv") {
-                    var bytes=File.ReadAllBytes(source);var utf8=new System.Text.UTF8Encoding(false,true);int origin;
-                    try{utf8.GetString(bytes);origin=65001;}catch(System.Text.DecoderFallbackException){origin=949;}
+                    using var input=File.OpenRead(source);var bytes=new byte[(int)Math.Min(65536,input.Length)];input.ReadExactly(bytes);var utf8=new System.Text.UTF8Encoding(false,true);int origin;
+                    try{utf8.GetDecoder().GetChars(bytes,0,bytes.Length,new char[bytes.Length],0,false);origin=65001;}catch(System.Text.DecoderFallbackException){origin=949;}
                     if(bytes.Length>=2&&(bytes[0]==255&&bytes[1]==254||bytes[0]==254&&bytes[1]==255))origin=1200;
                     app.Workbooks.OpenText(Filename:source,Origin:origin,DataType:1,TextQualifier:1,Tab:ext==".tsv",Comma:ext==".csv",Local:true);book=app.ActiveWorkbook;
                 }else book=app.Workbooks.Open(source,UpdateLinks:0,ReadOnly:true,IgnoreReadOnlyRecommended:true);

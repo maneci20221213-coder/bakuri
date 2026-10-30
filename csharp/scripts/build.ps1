@@ -8,6 +8,8 @@ Run { dotnet build csharp/tests/Bakuri.Checks/Bakuri.Checks.csproj -c Release -r
 $Checks=(Get-ChildItem csharp/tests/Bakuri.Checks/bin/Release -Filter Bakuri.Checks.dll -Recurse | Select-Object -First 1).FullName
 Run { dotnet $Checks --check "$Artifacts/checks" }
 Run { dotnet list csharp/src/Bakuri.Desktop/Bakuri.Desktop.csproj package --include-transitive --format json | Out-File -Encoding utf8 "$Artifacts/dependencies.json" }
+Run { dotnet format whitespace csharp/src/Bakuri.Desktop/Bakuri.Desktop.csproj --no-restore }
+Run { dotnet format whitespace csharp/tests/Bakuri.Checks/Bakuri.Checks.csproj --no-restore }
 $Results=@()
 foreach ($Kind in @('FrameworkDependent','SelfContained')) {
  $Folder=Join-Path $Artifacts $Kind

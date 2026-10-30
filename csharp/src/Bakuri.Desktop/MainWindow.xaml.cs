@@ -11,7 +11,7 @@ namespace Bakuri.Desktop;
 
 public partial class MainWindow : Window {
     readonly MainViewModel vm;readonly Forms.NotifyIcon tray;readonly bool smoke;
-    TrialSettings settings=TrialSettings.Load();QuickMenu? popup;GlobalHotkey? hotkey;bool exiting;double oldWidth=900;
+    TrialSettings settings=TrialSettings.Load();QuickMenu? popup;GlobalHotkey? hotkey;bool exiting;bool optionsValid=true;bool querying;double oldWidth=900;
     public MainWindow(bool uiSmoke=false) {
         smoke=uiSmoke;InitializeComponent();vm=new(new ConversionService(new StaRunner()),new FileStore(),new JsonRenameJournal(Path.Combine(TrialPaths.Root,"rename-history.json")));DataContext=vm;
         Icon=System.Windows.Media.Imaging.BitmapFrame.Create(new Uri(Path.Combine(AppContext.BaseDirectory,"app.ico")));
@@ -50,8 +50,8 @@ public partial class MainWindow : Window {
     void OptionsChanged(object sender,RoutedEventArgs e) {
         if(!IsInitialized||DataContext==null)return;bool perFile=PerFile.IsChecked==true;CommonText.IsEnabled=!perFile;ExtraColumn.Visibility=perFile&&Tabs.SelectedIndex==1?Visibility.Visible:Visibility.Collapsed;
         TextMarker.Visibility=TextPosition.SelectedIndex>=2?Visibility.Visible:Visibility.Collapsed;NumberMarker.Visibility=NumberPosition.SelectedIndex>=2?Visibility.Visible:Visibility.Collapsed;
-        if(!int.TryParse(Start.Text,out int start)||start<0||!int.TryParse(Digits.Text,out int digits)||digits<1||digits>8){vm.Status="시작 번호는 0 이상, 자릿수는 1~8로 입력해 주세요.";return;}
-        vm.Configure(new(Find.Text,Replace.Text,BaseName.Text,CommonText.Text,(InsertPosition)TextPosition.SelectedIndex,TextMarker.Text,perFile,NumberEnabled.IsChecked==true,start,digits,(string)((ComboBoxItem)Separator.SelectedItem).Tag,(InsertPosition)NumberPosition.SelectedIndex,NumberMarker.Text));
+        if(!int.TryParse(Start.Text,out int start)||start<0||!int.TryParse(Digits.Text,out int digits)||digits<1||digits>8){optionsValid=false;vm.Status="시작 번호는 0 이상, 자릿수는 1~8로 입력해 주세요.";return;}
+        optionsValid=true;vm.Configure(new(Find.Text,Replace.Text,BaseName.Text,CommonText.Text,(InsertPosition)TextPosition.SelectedIndex,TextMarker.Text,perFile,NumberEnabled.IsChecked==true,start,digits,(string)((ComboBoxItem)Separator.SelectedItem).Tag,(InsertPosition)NumberPosition.SelectedIndex,NumberMarker.Text));
     }
     void FormatChanged(object sender,SelectionChangedEventArgs e) {
         if(!IsInitialized||DataContext==null)return;if(Format.SelectedItem is not FormatChoice choice||!choice.Enabled){Format.SelectedItem=vm.Formats.FirstOrDefault(f=>f.Enabled);return;}
@@ -59,7 +59,7 @@ public partial class MainWindow : Window {
         Ratio.IsEnabled=choice.Value==OutputFormat.Compress;Protect.IsEnabled=choice.Value==OutputFormat.Compress;
     }
     void RatioChanged(object sender,SelectionChangedEventArgs e){if(IsInitialized&&DataContext!=null)settings=settings with{RetainPercent=int.Parse((string)((ComboBoxItem)Ratio.SelectedItem).Tag)};}
-    async void RunClick(object sender,RoutedEventArgs e){FileGrid.CommitEdit(DataGridEditingUnit.Cell,true);FileGrid.CommitEdit(DataGridEditingUnit.Row,true);if(vm.Busy){vm.Stop();return;}if(Tabs.SelectedIndex==1)await vm.Rename(false);else if(Format.SelectedItem is FormatChoice choice)await vm.Convert(choice.Value,Merge.IsChecked==true,settings,Protect.IsChecked==true);}
+    async void RunClick(object sender,RoutedEventArgs e){FileGrid.CommitEdit(DataGridEditingUnit.Cell,true);FileGrid.CommitEdit(DataGridEditingUnit.Row,true);if(vm.Busy){vm.Stop();return;}if(Tabs.SelectedIndex==1){if(!optionsValid){vm.Status="시작 번호와 자릿수를 확인해 주세요.";return;}await vm.Rename(false);}else if(Format.SelectedItem is FormatChoice choice)await vm.Convert(choice.Value,Merge.IsChecked==true,settings,Protect.IsChecked==true);}
     async void UndoClick(object sender,RoutedEventArgs e)=>await vm.Rename(true);
     void Open(){Show();if(WindowState==WindowState.Minimized)WindowState=WindowState.Normal;Activate();}
     void OnClosing(object? sender,CancelEventArgs e){if(exiting&&!vm.Busy)return;e.Cancel=true;vm.Clear();Hide();}
@@ -71,10 +71,10 @@ public partial class MainWindow : Window {
         panel.Children.Add(new TextBlock{Text="정식판과 단축키가 겹치지 않게 선택하세요.",Margin=new Thickness(4)});var keys=new ComboBox{ItemsSource=new[]{"Ctrl+Alt+F9","F9","F8","Ctrl+Alt+B"},SelectedItem=settings.Hotkey};panel.Children.Add(keys);var notify=new CheckBox{Content="완료 알림",IsChecked=settings.Notify};panel.Children.Add(notify);var save=new Button{Content="저장"};panel.Children.Add(save);save.Click+=(_,_)=>{try{hotkey?.Register((string)keys.SelectedItem);settings=settings with{Hotkey=(string)keys.SelectedItem,Notify=notify.IsChecked==true};settings.Save();dialog.Close();}catch(Exception error){MessageBox.Show(error.Message,"단축키 설정");}};dialog.Content=panel;dialog.ShowDialog();
     }
     async void TogglePopup() {
-        if(popup?.IsVisible==true){popup.Hide();return;}if(vm.Busy)return;
+        if(popup?.IsVisible==true){popup.Hide();return;}if(vm.Busy||querying)return;querying=true;
         try {
             var paths=await ExplorerSelection.ReadAsync();if(paths.Count==0){vm.Status="탐색기에서 파일을 선택한 뒤 단축키를 눌러 주세요.";return;}
             popup?.Close();popup=new QuickMenu(paths,async(format,expand)=>{if(expand){AddPaths(paths);Open();return;}vm.Clear();AddPaths(paths);await vm.Convert(format,paths.Count>1&&Capabilities.CanMerge(paths,format),settings,false);});popup.ShowAtCursor();
-        }catch(Exception error){vm.Status=ConversionService.Friendly(error);}
+        }catch(Exception error){vm.Status=ConversionService.Friendly(error);}finally{querying=false;}
     }
 }

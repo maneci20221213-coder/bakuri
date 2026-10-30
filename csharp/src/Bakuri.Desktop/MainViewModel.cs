@@ -43,7 +43,7 @@ public sealed class MainViewModel : Observable {
     public JobReport? LastReport {get;private set;}
     public event Action<string>? Completed;
     public event Action? CapabilitiesChanged;
-    public bool Busy {get=>busy;private set{busy=value;Notify();Notify(nameof(CanEdit));}}
+    public bool Busy {get=>busy;private set{busy=value;if(value)previewTimer.Stop();Notify();Notify(nameof(CanEdit));}}
     public bool CanEdit=>!Busy;
     public string Status {get=>status;set{status=value;Notify();}}
     public int Progress {get=>progress;set{progress=value;Notify();}}

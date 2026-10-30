@@ -1,5 +1,5 @@
 """CI-only: real Windows download transport and installed Velopack SDK check/download."""
-import json,shutil,sys,tempfile,xml.etree.ElementTree as ET
+import json,shutil,subprocess,sys,tempfile,xml.etree.ElementTree as ET
 from pathlib import Path
 import velopack
 from update_transport import download_to
@@ -16,21 +16,27 @@ def verify(root,releases):
   manifest=root/'current'/'sq.version'
   tree=ET.parse(manifest)
   node=next(x for x in tree.iter() if x.tag.rsplit('}',1)[-1]=='version')
-  node.text='0.14.7';older=folder/'older.version';tree.write(older,encoding='utf-8',xml_declaration=True)
-  locator=velopack.VelopackLocatorConfig(root,root/'Update.exe',root/'packages',older,root/'current',False)
-  def factory(source):return velopack.UpdateManager(source,locator=locator)
-  def copy_asset(url,target,limit):
-   name=url.rsplit('/',1)[-1];source=releases/name
-   assert source.stat().st_size<=limit;shutil.copyfile(source,target)
-  manager=PublicReleaseManager('https://github.com/maneci20221213-coder/bakuri',sdk_factory=factory,downloader=copy_asset)
-  try:
-   info=manager.check_for_updates()
-   assert info and str(info.TargetFullRelease.Version)==VERSION
-   package=root/'packages'/info.TargetFullRelease.FileName
-   package.unlink(missing_ok=True)
-   manager.download_updates(info)
-   assert package.is_file() and package.stat().st_size==info.TargetFullRelease.Size
-   print('Installed SDK older-version detection and verified package download passed.')
-  finally:manager.folder.cleanup()
+  # Exercise the exact parser shipped in 0.15.0, not just its replacement.
+  legacy_source=subprocess.check_output(['git','show','dbc2eaada3b62c813095645289e934a3f79bde47:update_source.py'],text=True,encoding='utf-8')
+  namespace={'__name__':'bakuri_legacy_update_verification'}
+  exec(compile(legacy_source,'released-0.15.0/update_source.py','exec'),namespace)
+  for baseline in ('0.15.0','1.0.0-beta.1'):
+   node.text=baseline;older=folder/'older.version';tree.write(older,encoding='utf-8',xml_declaration=True)
+   locator=velopack.VelopackLocatorConfig(root,root/'Update.exe',root/'packages',older,root/'current',False)
+   def factory(source):return velopack.UpdateManager(source,locator=locator)
+   def copy_asset(url,target,limit):
+    name=url.rsplit('/',1)[-1];source=releases/name
+    assert source.stat().st_size<=limit;shutil.copyfile(source,target)
+   for label,manager_type in [('released-0.15.0',namespace['PublicReleaseManager']),('current',PublicReleaseManager)]:
+    manager=manager_type('https://github.com/maneci20221213-coder/bakuri',sdk_factory=factory,downloader=copy_asset)
+    try:
+     info=manager.check_for_updates()
+     assert info and str(info.TargetFullRelease.Version)==VERSION
+     package=root/'packages'/info.TargetFullRelease.FileName
+     package.unlink(missing_ok=True)
+     manager.download_updates(info)
+     assert package.is_file() and package.stat().st_size==info.TargetFullRelease.Size
+     print(f'Installed SDK update verification passed: baseline={baseline}, client={label}, target={VERSION}')
+    finally:manager.folder.cleanup()
 
 if __name__=='__main__':verify(Path(sys.argv[1]),Path(sys.argv[2]))

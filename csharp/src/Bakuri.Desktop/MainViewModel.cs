@@ -205,10 +205,10 @@ public sealed class MainViewModel : Observable
             Plan = planner.Preview(selected.Select(f => new FileRule(f.Input, f.Extra, f.ManualName)).ToArray(), Options);
             var byId = Plan.ToDictionary(p => p.Id);
             foreach (var row in Files)
-            if (byId.TryGetValue(row.Id, out var plan))
-                row.Preview(Path.GetFileName(plan.Target), plan.Error.Length > 0 ? plan.Error : plan.Changed ? "변경 가능" : "변경 없음");
-            else
-                row.Preview("", "선택 안 됨");
+                if (byId.TryGetValue(row.Id, out var plan))
+                    row.Preview(Path.GetFileName(plan.Target), plan.Error.Length > 0 ? plan.Error : plan.Changed ? "변경 가능" : "변경 없음");
+                else
+                    row.Preview("", "선택 안 됨");
         }
         catch (Exception error) { Status = ConversionService.Friendly(error); Plan = []; }
         finally { refreshing = false; CapabilitiesChanged?.Invoke(); }
@@ -249,8 +249,8 @@ public sealed class MainViewModel : Observable
             var moved = await Task.Run(() => undo ? renamer.Undo() : renamer.Apply(plan));
             var mapping = moved.ToDictionary(m => m.Original, m => m.Current, StringComparer.OrdinalIgnoreCase);
             foreach (var row in Files)
-            if (mapping.TryGetValue(row.FullPath, out var path))
-                row.Renamed(path);
+                if (mapping.TryGetValue(row.FullPath, out var path))
+                    row.Renamed(path);
             index.Clear();
             foreach (var row in Files)
                 index[row.FullPath] = row;

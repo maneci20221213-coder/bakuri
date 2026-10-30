@@ -128,6 +128,35 @@ internal static class Program
             Check(PixelBytes(Images.Load(extracted)[0]).SequenceEqual(PixelBytes(bitmap)), "PNG to PDF embedded pixels are lossless");
         }
         Check(File.ReadAllBytes(png).SequenceEqual(bytes), "conversion leaves original PNG unchanged");
+        string jpeg = work.File("jpeg");
+        Images.Save(bitmap, jpeg, true);
+        string jpegPdf = work.File("pdf");
+        engine.FromImages(jpeg, jpegPdf, work, CancellationToken.None);
+        using (var document = new Document(jpegPdf))
+        {
+            var encoded = document.ExtractImage(document.GetPageImages(0)[0].Xref).Image;
+            Check(encoded.SequenceEqual(File.ReadAllBytes(jpeg)), "JPEG stream is embedded without recompression");
+        }
+        var alphaPixels = Pixels(50, 60);
+        for (int i = 3; i < alphaPixels.Length; i += 4)
+            alphaPixels[i] = (byte)(i % 255);
+        var transparent = BitmapSource.Create(50, 60, 96, 96, PixelFormats.Bgra32, null, alphaPixels, 50 * 4);
+        string alphaPng = work.File("png");
+        Images.Save(transparent, alphaPng);
+        string alphaPdf = work.File("pdf");
+        engine.FromImages(alphaPng, alphaPdf, work, CancellationToken.None);
+        using (var document = new Document(alphaPdf))
+            Check(document.GetPageImages(0)[0].Smask > 0, "PNG transparency survives PDF embedding");
+        string rotated = work.File("pdf");
+        using (var document = new Document(pdf))
+        {
+            document[0].SetRotation(90);
+            PdfEngine.Save(document, rotated);
+        }
+        var rotatedPages = engine.Render(rotated, work, 150, CancellationToken.None);
+        Check(rotatedPages[0].WidthPoints > rotatedPages[0].HeightPoints, "rotated PDF rendering keeps displayed page orientation");
+        var skip = new ConversionService(new StaRunner()).RunAsync(new([new(Guid.NewGuid(), jpeg)], OutputFormat.Compress, RetainPercent: 100), new Progress<JobProgress>(), CancellationToken.None).GetAwaiter().GetResult();
+        Check(skip.Files.Count == 1 && skip.Files[0].Outcome == FileOutcome.Skipped, "pixel-preserving compression never re-encodes JPEG");
         string merged = work.File("pdf");
         engine.Merge([pdf, pdf], merged, CancellationToken.None);
         Check(engine.PageCount(merged) == 2, "PDF merge page count");
@@ -188,7 +217,7 @@ internal static class Program
     static void Benchmark(string root)
     {
         var paths = Directory.EnumerateFiles(root, "sample_*.png").OrderBy(p => p).ToArray();
-        var output = Path.Combine(root, "native-output");
+        var output = Path.Combine(root, "native-output-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(output);
         var copy = paths.Select(p => { string path = Path.Combine(output, Path.GetFileName(p)); File.Copy(p, path, true); return new InputFile(Guid.NewGuid(), path); }).ToArray();
         var service = new ConversionService(new StaRunner());

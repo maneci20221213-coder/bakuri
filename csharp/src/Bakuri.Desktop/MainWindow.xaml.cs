@@ -99,10 +99,10 @@ public partial class MainWindow : Window
                 throw new ArgumentException("붙여넣을 줄 수가 남은 체크 파일 수보다 많습니다.");
             FileGrid.CancelEdit();
             for (int i = 0; i < values.Length; i++)
-            if (column == ExtraColumn)
-                rows[i].Extra = values[i];
-            else
-                rows[i].NextName = values[i];
+                if (column == ExtraColumn)
+                    rows[i].Extra = values[i];
+                else
+                    rows[i].NextName = values[i];
             vm.Refresh();
         }
         catch (ArgumentException error) { vm.Status = error.Message; }

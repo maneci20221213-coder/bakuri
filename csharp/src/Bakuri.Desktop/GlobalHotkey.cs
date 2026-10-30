@@ -53,6 +53,7 @@ public sealed class GlobalHotkey : IDisposable
 }
 public static class ExplorerSelection
 {
+    static readonly StaRunner QueryRunner = new();
     [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr window, System.Text.StringBuilder name, int max);
     public static async Task<IReadOnlyList<string>> ReadAsync()
@@ -62,7 +63,8 @@ public static class ExplorerSelection
         GetClassName(hwnd, klass, 256);
         if (!new[] { "CabinetWClass", "ExploreWClass", "Progman", "WorkerW" }.Contains(klass.ToString()))
             return [];
-        var work = new StaRunner().Run<IReadOnlyList<string>>(() =>
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        var work = QueryRunner.Run<IReadOnlyList<string>>(() =>
         {
             dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("Shell.Application")!)!;
             try
@@ -76,8 +78,8 @@ public static class ExplorerSelection
                         if ((long)window.HWND != hwnd.ToInt64())
                             continue;
                         foreach (dynamic item in window.Document.SelectedItems())
-                        if (!(bool)item.IsFolder && File.Exists((string)item.Path))
-                            paths.Add((string)item.Path);
+                            if (!(bool)item.IsFolder && File.Exists((string)item.Path))
+                                paths.Add((string)item.Path);
                         if (paths.Count > 0)
                             break;
                     }
@@ -87,13 +89,13 @@ public static class ExplorerSelection
                 {
                     dynamic desktop = windows.FindWindowSW(0, 0, 8, out int _, 1);
                     foreach (dynamic item in desktop.Document.SelectedItems())
-                    if (!(bool)item.IsFolder && File.Exists((string)item.Path))
-                        paths.Add((string)item.Path);
+                        if (!(bool)item.IsFolder && File.Exists((string)item.Path))
+                            paths.Add((string)item.Path);
                 }
                 return paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             }
             finally { Marshal.FinalReleaseComObject(shell); }
-        });
+        }, deadline.Token);
         if (await Task.WhenAny(work, Task.Delay(3000)) != work)
             throw new IOException("탐색기 응답이 지연됩니다. 다시 시도해 주세요.");
         var result = await work;

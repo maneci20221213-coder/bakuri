@@ -37,4 +37,4 @@ Existing `image_inputs.py`, `hancom_images.py`, `pdf_pages.py`, `hancom_merge.py
 
 ## Validation and limits
 
-Full unittest discovery is required on Windows CI, then PyInstaller developer build and native packaged-window startup. Source ZIPs include `bakuri/`, tools, guides and developer requirements; no caches/build products. Real Office/Hancom automation still needs a PC with those applications. This change does not promise fewer V3 alerts or faster conversion: the engines and packaging method are unchanged.
+Full unittest discovery is required on Windows CI, native popup timer/focus checks, then PyInstaller developer build and native packaged-window startup. Source ZIPs include `bakuri/`, tools, guides and developer requirements; no caches/build products. Real Office/Hancom automation still needs a PC with those applications. This change does not promise fewer V3 alerts or faster conversion: the engines and packaging method are unchanged.

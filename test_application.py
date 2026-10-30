@@ -7,6 +7,7 @@ os.environ.setdefault("BAKURI_DISABLE_SHELL_INTEGRATION", "1")
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 import tempfile
+import types
 import unittest
 from unittest.mock import patch
 
@@ -32,6 +33,22 @@ APP = QApplication.instance() or QApplication([])
 
 
 class RequestTests(unittest.TestCase):
+    def test_startup_error_remains_friendly_without_imported_qt(self):
+        import app
+        import ctypes
+
+        notice = types.SimpleNamespace(MessageBoxW=lambda *args: None)
+        with (
+            patch.dict("sys.modules", {"PySide6.QtWidgets": None}),
+            patch("app.sys.platform", "win32"),
+            patch("app.friendly_error", return_value="사용자 안내") as friendly,
+            patch.object(ctypes, "windll", types.SimpleNamespace(user32=notice), create=True),
+            patch.object(notice, "MessageBoxW") as message,
+        ):
+            app.startup_error(ImportError, ImportError("private dependency details"), None)
+            self.assertEqual(friendly.call_args.args[1], "startup")
+            self.assertEqual(message.call_args.args[1], "사용자 안내")
+
     def test_request_copies_order_and_rejects_field_mutation(self):
         inputs = [InputFile("b.png"), InputFile("a.png")]
         request = ConversionRequest(inputs, "JPG")

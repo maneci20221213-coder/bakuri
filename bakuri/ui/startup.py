@@ -2,19 +2,9 @@
 
 import sys, json
 from build_channel import DEVELOPMENT, SERVER_NAME
-from user_messages import friendly_error
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 from .main_window import Window
-
-
-def startup_error(kind, value, tb):
-    running = "QApplication" in globals() and QApplication.instance() is not None
-    message = friendly_error(value, "conversion" if running else "startup")
-    if sys.platform == "win32":
-        import ctypes
-
-        ctypes.windll.user32.MessageBoxW(None, message, "바꾸리 안내", 16)
 
 
 def main():

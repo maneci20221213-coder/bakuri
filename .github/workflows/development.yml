@@ -36,6 +36,8 @@ jobs:
         run: |
           python -m unittest discover -v
           if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
+          python verify_popup.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native popup verification failed' }
       - name: Build portable developer edition
         shell: pwsh
         run: ./build_dev.ps1

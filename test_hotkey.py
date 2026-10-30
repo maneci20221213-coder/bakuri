@@ -6,7 +6,7 @@ class HotkeyTests(unittest.TestCase):
  def test_repeated_keys_and_exception_recovery(self):
   class Suppress(Exception): pass
   class Settings:
-   def value(self,key,default,**kw): return default
+   def value(self,key,default,**kw): return '` (백틱)' if key=='hotkey' else default
   fakegui=types.SimpleNamespace(GetForegroundWindow=lambda:123,GetClassName=lambda hwnd:'CabinetWClass')
   fakeprocess=types.SimpleNamespace(GetWindowThreadProcessId=lambda hwnd:(1,1))
   api=types.SimpleNamespace(GetAsyncKeyState=lambda vk:0,GetGUIThreadInfo=lambda *a:False)

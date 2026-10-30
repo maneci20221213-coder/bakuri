@@ -1,11 +1,12 @@
 """Ordered, checked input files with batched duplicate lookup."""
 import os,re
 from pathlib import Path
-from PySide6.QtCore import Qt,Signal,QSize
+from PySide6.QtCore import Qt,Signal,QSize,QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (QApplication,QTreeWidget,QTreeWidgetItem,QHeaderView,QAbstractItemView,QLabel,QCheckBox,QMenu)
 from engine import SUPPORTED,SPREADSHEETS,IMAGES
 from theme import icon,stylesheet
+from file_names import FileNameDelegate
 
 def natural_key(text):
     return tuple((1,int(p)) if p.isdigit() else (0,p.casefold()) for p in re.split(r'(\d+)',text))
@@ -15,7 +16,7 @@ class Files(QTreeWidget):
     def __init__(self,allow_all=False):
         super().__init__();self.allow_all=allow_all; self.setColumnCount(4); self.setHeaderLabels(['','미리보기','파일명','용량'])
         self.setRootIsDecorated(False); self.setAlternatingRowColors(False); self.setStyleSheet(stylesheet())
-        self.setUniformRowHeights(True); self.setIndentation(0)
+        self.setUniformRowHeights(False); self.setIndentation(0); self.setItemDelegate(FileNameDelegate(self))
 
         self.header().setStretchLastSection(False); self.header().setSectionResizeMode(QHeaderView.Interactive)
         self.setColumnWidth(0,84); self.setColumnWidth(1,100); self.setColumnWidth(2,420); self.setColumnWidth(3,115)
@@ -26,6 +27,29 @@ class Files(QTreeWidget):
         self.master=QCheckBox(self.header().viewport()); self.master.setTristate(True); self.master.setToolTip('전체 선택 / 해제'); self.master.setAccessibleName('전체 선택')
         self.master.clicked.connect(lambda:self.check_all(Qt.Checked if self.master.checkState()!=Qt.Unchecked else Qt.Unchecked))
         self.header().sectionResized.connect(self.place_master); self.header().geometriesChanged.connect(self.place_master); self.header().sectionMoved.connect(self.place_master); self.itemChanged.connect(lambda item,column:self.sync_master() if column==0 else None); self.place_master()
+        self.fit_timer=QTimer(self);self.fit_timer.setSingleShot(True);self.fit_timer.timeout.connect(self.fit_name_columns)
+        self.reflow_timer=QTimer(self);self.reflow_timer.setSingleShot(True);self.reflow_timer.timeout.connect(self.reflow_names)
+        self.changed.connect(self.request_name_fit);self.header().sectionResized.connect(self.name_column_resized)
+    def name_column_resized(self,column,*_):
+        self.reflow_timer.start(0)
+        if column==5:self.request_name_fit()
+    def resizeEvent(self,event):
+        super().resizeEvent(event)
+        if hasattr(self,'fit_timer'):self.request_name_fit()
+    def request_name_fit(self):self.fit_timer.start(0)
+    def reflow_names(self):self.scheduleDelayedItemsLayout();self.viewport().update()
+    def fit_name_columns(self):
+        columns=[c for c in (2,4) if c<self.columnCount() and not self.isColumnHidden(c)]
+        if not columns:return
+        other=sum(self.columnWidth(c) for c in range(self.columnCount()) if c not in columns and not self.isColumnHidden(c))
+        budget=max(1,self.viewport().width()-other-2);metrics=self.fontMetrics()
+        desired=[max(160,max((metrics.horizontalAdvance(self.item(i).text(c))+24 for i in range(self.count())),default=0)) for c in columns]
+        if sum(desired)>budget:
+            minimum=min(160,budget//len(columns));extra=max(0,budget-minimum*len(columns));weights=[max(1,d-minimum) for d in desired]
+            widths=[minimum+int(extra*w/sum(weights)) for w in weights];widths[-1]+=budget-sum(widths)
+        else:widths=desired
+        for column,width in zip(columns,widths):self.setColumnWidth(column,width)
+        self.reflow_names()
     def delete_selected(self):
         if not self.isEnabled(): return
         for item in self.selectedItems(): self.takeTopLevelItem(self.indexOfTopLevelItem(item))

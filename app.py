@@ -1,6 +1,6 @@
 import sys, os, threading, json
 from pathlib import Path
-from build_channel import DEVELOPMENT,SETTINGS_APP,SERVER_NAME,BUILD_LABEL
+from build_channel import DEVELOPMENT,SETTINGS_APP,SERVER_NAME,BUILD_LABEL,DEFAULT_HOTKEY
 from user_messages import friendly_error
 
 def startup_error(kind,value,tb):
@@ -178,6 +178,8 @@ class Window(QWidget):
             for key in legacy.allKeys():
                 if not self.settings.contains(key):self.settings.setValue(key,legacy.value(key))
             self.settings.setValue('settings_migrated',True);self.settings.sync()
+        if DEVELOPMENT and not self.settings.value('development_hotkey_ready',False,type=bool):
+            self.settings.setValue('hotkey',DEFAULT_HOTKEY);self.settings.setValue('development_hotkey_ready',True)
         self.setWindowTitle(f'바꾸리 파일 변환기 {BUILD_LABEL}'); self.resize(840,650); self.setMinimumSize(760,540); self.setObjectName('mainWindow');self.setStyleSheet(stylesheet())
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0);layout.setSpacing(0)
         toolbar=QFrame();self.toolbar=toolbar;toolbar.setObjectName('toolbar');row=QHBoxLayout(toolbar);row.setContentsMargins(16,16,16,14);row.setSpacing(10)
@@ -236,13 +238,15 @@ class Window(QWidget):
         self.bus.progress.connect(self.update_progress)
         self.files.paste_requested.connect(self.paste_files);QApplication.instance().installEventFilter(self)
         self.bus.message.connect(self.status.setText); self.bus.error.connect(self.failed); self.bus.done.connect(self.finished); self.bus.selected.connect(self.receive)
-        if sys.platform=='win32' and not DEVELOPMENT and os.environ.get('BAKURI_DISABLE_SHELL_INTEGRATION')!='1':
-            from windows import SelectionWatcher,MouseWatcher,migrate_menu,initialize_startup
-            try:
-                initialize_startup(self.settings,first_run=first_run)
-                if migrate_menu(self.settings.value('explorer',True,type=bool)):
-                    self.settings.setValue('explorer',True);self.settings.sync()
-            except Exception as exc:self.status.setText(friendly_error(exc,'menu'))
+        if sys.platform=='win32' and os.environ.get('BAKURI_DISABLE_SHELL_INTEGRATION')!='1':
+            from windows import SelectionWatcher,MouseWatcher
+            if not DEVELOPMENT:
+                from windows import migrate_menu,initialize_startup
+                try:
+                    initialize_startup(self.settings,first_run=first_run)
+                    if migrate_menu(self.settings.value('explorer',True,type=bool)):
+                        self.settings.setValue('explorer',True);self.settings.sync()
+                except Exception as exc:self.status.setText(friendly_error(exc,'menu'))
             self.watcher=SelectionWatcher(self.bus.selected.emit,self.bus.message.emit,self.settings,self.bus.dismiss.emit,self.bus.popup_key.emit)
             self.popup.visibility.connect(self.popup_visibility);self.watcher.start()
             self.mouse_watcher=MouseWatcher(self.bus.clicked.emit); self.mouse_watcher.start()

@@ -4,9 +4,10 @@ from pathlib import Path
 from PySide6.QtCore import Qt,QStandardPaths
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QLineEdit,QLabel,QSpinBox,QPushButton,QMessageBox,QFormLayout,QComboBox,QCheckBox,QApplication,QStyledItemDelegate,QHeaderView)
+from file_names import FileNameDelegate
 from rename_engine import preview,apply,undo,fill_down,_text_lines
 
-class TextDelegate(QStyledItemDelegate):
+class TextDelegate(FileNameDelegate):
     def createEditor(self,parent,option,index):
         return super().createEditor(parent,option,index) if index.column() in {4,6} and self.parent().window().mode_tabs.currentIndex()==1 and not self.parent().window().busy else None
 
@@ -114,6 +115,7 @@ class RenamePanel(QWidget):
         self.restore.setEnabled(state=='complete' and not self.window.busy)
         self.message.setText(f'{count}개 변경 예정 · 오류 {errors}개'+(' · 미완료 기록을 먼저 확인해 주세요.' if state in {'working','recovery_needed'} else ''))
         if state in {'working','recovery_needed'}:self.run.setEnabled(False)
+        self.files.request_name_fit()
     def update_paths(self,entries):
         mapping={e['original']:e['current'] for e in entries};self.files.blockSignals(True)
         try:

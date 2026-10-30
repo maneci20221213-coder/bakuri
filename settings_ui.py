@@ -1,6 +1,6 @@
 """Application preferences and their Windows integration."""
 import sys
-from build_channel import DEVELOPMENT
+from build_channel import DEVELOPMENT,DEFAULT_HOTKEY
 from PySide6.QtWidgets import (QDialog,QFormLayout,QCheckBox,QComboBox,QLabel,QDialogButtonBox,QMessageBox)
 from work_ui import add_profiles,read_options
 from user_messages import friendly_error
@@ -8,9 +8,9 @@ from user_messages import friendly_error
 class SettingsDialog(QDialog):
     def __init__(self,window):
         super().__init__(window); self.window=window; self.setWindowTitle('바꾸리 설정'); form=QFormLayout(self)
-        if DEVELOPMENT:form.addRow(QLabel('개발판은 전역 단축키·시작프로그램·우클릭 메뉴를 등록하지 않습니다.'))
+        if DEVELOPMENT:form.addRow(QLabel('개발판 기본 단축키는 F9입니다. 시작프로그램·우클릭 메뉴는 등록하지 않습니다.'))
         self.enabled=QCheckBox('단축키 사용'); self.enabled.setChecked(window.settings.value('hotkey_enabled',True,type=bool)); form.addRow(self.enabled)
-        self.key=QComboBox(); self.key.addItems(['` (백틱)','F8','F9','Ctrl+Alt+B']); self.key.setCurrentText(window.settings.value('hotkey','` (백틱)')); form.addRow('단축키',self.key)
+        self.key=QComboBox(); self.key.addItems(['` (백틱)','F8','F9','Ctrl+Alt+B']); self.key.setCurrentText(window.settings.value('hotkey',DEFAULT_HOTKEY)); form.addRow('단축키',self.key)
         hint=QLabel('탐색기·바탕화면에서 작동합니다. 다른 앱과 충돌하면 F8 또는 Ctrl+Alt+B로 바꿔 주세요.'); hint.setWordWrap(True); form.addRow(hint)
         self.auto=QCheckBox('윈도우 로그인 시 백그라운드 실행')
         self.auto.setChecked(window.settings.value('startup_enabled',True,type=bool))
@@ -18,7 +18,7 @@ class SettingsDialog(QDialog):
             from windows import startup_enabled
             self.auto.setChecked(startup_enabled())
         else: self.auto.setEnabled(False)
-        if DEVELOPMENT:self.auto.setChecked(False);self.auto.setEnabled(False);self.enabled.setEnabled(False);self.key.setEnabled(False)
+        if DEVELOPMENT:self.auto.setChecked(False);self.auto.setEnabled(False)
         form.addRow(self.auto)
         self.explorer=QCheckBox('탐색기 우클릭 메뉴 추가'); self.explorer.setChecked(window.settings.value('explorer',True,type=bool)); form.addRow(self.explorer)
         if DEVELOPMENT:self.explorer.setChecked(False);self.explorer.setEnabled(False)

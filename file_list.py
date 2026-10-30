@@ -266,7 +266,7 @@ class Files(QTreeWidget):
                 )
                 item.setFlags((item.flags() | Qt.ItemIsUserCheckable) & ~Qt.ItemIsDropEnabled)
                 item.setCheckState(0, Qt.Checked)
-                item.setSizeHint(0, QSize(70, 60))
+                item.setSizeHint(0, QSize(70, 48 if self.property("compactRows") else 60))
                 self.addTopLevelItem(item)
         self.sync_master()
 

@@ -27,9 +27,9 @@ class HelpTests(unittest.TestCase):
  def test_help_tabs_and_removed_repair_actions_and_tray_entry(self):
   from app import SettingsDialog
   w=Window();dialog=HelpDialog(w)
-  self.assertEqual([dialog.tabs.tabText(i) for i in range(dialog.tabs.count())],['사용 설명','패치노트'])
+  self.assertEqual([dialog.tabs.tabText(i) for i in range(dialog.tabs.count())],['파일 형식 변환','파일명 변경','패치노트'])
   self.assertIn('0.15.0',dialog.notes.toPlainText())
-  dialog.tabs.setCurrentIndex(1);self.assertEqual(dialog.tabs.currentWidget(),dialog.notes)
+  dialog.tabs.setCurrentIndex(2);self.assertEqual(dialog.tabs.currentWidget(),dialog.notes)
   self.assertNotIn('단축키 다시 연결',[a.text() for a in w.tray.contextMenu().actions()])
   settings=SettingsDialog(w)
   self.assertNotIn('우클릭 메뉴 다시 등록',[b.text() for b in settings.findChildren(QPushButton)])
@@ -49,7 +49,7 @@ class HelpTests(unittest.TestCase):
   root=Path(__file__).parent
   self.assertIn('## 빌드·배포',(root/'DEVELOPER-README.md').read_text(encoding='utf-8'))
   self.assertNotIn('py -3.12',(root/'README.md').read_text(encoding='utf-8'))
-  for name in ['build_release.ps1','build_exe.bat']:self.assertIn('USER-GUIDE.md;.',(root/name).read_text(encoding='utf-8'));self.assertIn('PATCH-NOTES.md;.',(root/name).read_text(encoding='utf-8'))
+  for name in ['build_release.ps1','build_exe.bat']:self.assertIn('USER-GUIDE.md;.',(root/name).read_text(encoding='utf-8'));self.assertIn('PATCH-NOTES.md;.',(root/name).read_text(encoding='utf-8'));self.assertIn('RENAME-GUIDE.md;.',(root/name).read_text(encoding='utf-8'))
 
 class UserMessageTests(unittest.TestCase):
  def test_user_messages_hide_technical_details_and_offer_a_next_step(self):

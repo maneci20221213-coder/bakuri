@@ -55,6 +55,10 @@ class RenamePanel(QWidget):
         super().__init__()
         self.window = window
         self.files = window.files
+        self.setObjectName("renamePanel")
+        self.setStyleSheet("""
+            QWidget#renamePanel QComboBox {padding:5px 12px;min-height:18px;}
+        """)
         self.rows = []
         self.journal = (
             Path(QStandardPaths.writableLocation(QStandardPaths.GenericDataLocation))
@@ -75,10 +79,10 @@ class RenamePanel(QWidget):
         )
         self.files.header().setSectionResizeMode(5, QHeaderView.ResizeToContents)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 12, 20, 12)
+        layout.setContentsMargins(20, 8, 20, 8)
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        form.setVerticalSpacing(8)
+        form.setVerticalSpacing(6)
         form.setHorizontalSpacing(14)
         layout.addLayout(form)
         self.find = QLineEdit()
@@ -103,7 +107,7 @@ class RenamePanel(QWidget):
         line.addWidget(self.string_position)
         line.addWidget(self.string_marker)
         self.string_label = QLabel("문자열 추가")
-        self.string_label.setMinimumHeight(40)
+        self.string_label.setMinimumHeight(32)
         self.string_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         form.addRow(self.string_label, line)
         self.base = QLineEdit()
@@ -118,7 +122,7 @@ class RenamePanel(QWidget):
         self.number_position = QComboBox()
         positions(self.number_position)
         self.number_position.setCurrentIndex(1)
-        self.number_enabled.setMinimumHeight(40)
+        self.number_enabled.setMinimumHeight(32)
         self.number_marker = QLineEdit()
         self.number_marker.setPlaceholderText("처음 일치하는 기준 문자")
         self.number_marker.hide()
@@ -147,12 +151,15 @@ class RenamePanel(QWidget):
         layout.addWidget(self.message)
         line = QHBoxLayout()
         line.setSpacing(8)
-        self.restore = QPushButton("마지막 변경 되돌리기")
+        self.restore = QPushButton("실행 취소")
+        self.restore.setEnabled(False)
         self.run = QPushButton("이름 변경 적용")
         self.run.setObjectName("convert")
-        line.addWidget(self.restore)
+        self.run.setFixedSize(164, 44)
+        self.restore.setFixedSize(164, 44)
         line.addStretch()
         line.addWidget(self.run)
+        line.addWidget(self.restore)
         layout.addLayout(line)
         self.base.textChanged.connect(self.base_changed)
         for field in [self.find, self.replace, self.string, self.string_marker, self.number_marker]:
@@ -363,7 +370,7 @@ class RenamePanel(QWidget):
         try:
             entries = apply(self.rows, self.journal)
             self.update_paths(entries)
-            summary = f"{len(entries)}개 이름 변경 완료 · 마지막 변경 되돌리기 가능"
+            summary = f"{len(entries)}개 이름 변경 완료 · 실행 취소 가능"
             self.message.setText(summary)
             if entries:
                 self.window.show_completion(

@@ -33,4 +33,4 @@ class FileNameDelegate(QStyledItemDelegate):
         if index.column() not in {2,4}:return super().sizeHint(option,index)
         opt=QStyleOptionViewItem(option);self.initStyleOption(opt,index)
         width=max(1,self.parent().columnWidth(index.column())-24)
-        return QSize(width,max(60,len(name_lines(opt.text,opt.font.toString(),width))*opt.fontMetrics.height()+16))
+        return QSize(width,max(48 if self.parent().property("compactRows") else 60,len(name_lines(opt.text,opt.font.toString(),width))*opt.fontMetrics.height()+16))

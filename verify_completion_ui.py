@@ -21,7 +21,7 @@ with tempfile.TemporaryDirectory() as directory:
     window = Window()
     window.settings = QSettings(str(root / "prefs.ini"), QSettings.IniFormat)
     try:
-        for name in ["서울_월별업무실적_보고서.pdf", "부산_월별업무실적_보고서.pdf"]:
+        for name in [f"월별업무실적_{i}.pdf" for i in range(1, 7)]:
             source = root / name
             source.write_bytes(b"UI fixture")
             window.files.add_paths([str(source)])
@@ -29,6 +29,12 @@ with tempfile.TemporaryDirectory() as directory:
         window.mode_tabs.setCurrentIndex(1)
         window.files.item(0).setSelected(True)
         QTest.qWait(100)
+        assert (
+            window.files.visualItemRect(window.files.item(5)).bottom()
+            <= window.files.viewport().height()
+        ), "Six rows should fit"
+        assert window.rename_panel.run.size() == window.rename_panel.restore.size()
+        assert window.rename_panel.restore.x() > window.rename_panel.run.geometry().right()
         form = window.rename_panel.layout().itemAt(0).layout()
         labels = [form.itemAt(i, QFormLayout.LabelRole).widget() for i in range(3)]
         centers = [label.geometry().center().y() for label in labels]

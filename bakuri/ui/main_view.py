@@ -1,5 +1,6 @@
 """Build the main controls. Business rules and workers live outside this view."""
 
+from PySide6.QtCore import QSize
 from PySide6.QtGui import QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -20,7 +21,7 @@ from .format_delegate import OutputFormatDelegate
 
 def build_main_view(self):
     self.setWindowTitle(f"바꾸리 파일 변환기 {BUILD_LABEL}")
-    self.resize(840, 650)
+    self.resize(840, min(740, self.screen().availableGeometry().height() - 60))
     self.setMinimumSize(760, 540)
     self.setObjectName("mainWindow")
     self.setStyleSheet(stylesheet())
@@ -159,6 +160,9 @@ def build_main_view(self):
         if index == 1 and self.previous_mode == 0:
             self.conversion_size = self.size()
         self.setMinimumWidth(1100 if index == 1 else 760)
+        self.files.setProperty("compactRows", index == 1)
+        for row_index in range(self.files.count()):
+            self.files.item(row_index).setSizeHint(0, QSize(70, 48 if index == 1 else 60))
         self.rename_panel.setVisible(index == 1)
         options.setVisible(index == 0)
         footer.setVisible(index == 0)
@@ -169,8 +173,12 @@ def build_main_view(self):
             self.files.setColumnHidden(column, index == 1)
         self.layout().invalidate()
         self.layout().activate()
-        if index == 0 and self.previous_mode == 1 and not self.isMaximized():
-            self.resize(self.conversion_size)
+        if not self.isMaximized():
+            if index == 1 and self.previous_mode == 0:
+                available = self.screen().availableGeometry().height() - 40
+                self.resize(self.width(), min(max(self.height(), 820), available))
+            elif index == 0 and self.previous_mode == 1:
+                self.resize(self.conversion_size)
         self.previous_mode = index
         self.rename_panel.refresh()
 

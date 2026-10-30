@@ -87,3 +87,42 @@ class CompletionUiTests(unittest.TestCase):
         self.assertEqual(panel.base.placeholderText(), "")
         centers = [label.geometry().center().y() for label in labels]
         self.assertLessEqual(abs((centers[1] - centers[0]) - (centers[2] - centers[1])), 2)
+
+    def test_six_rows_visible_and_undo_button_tracks_completed_change(self):
+        w = self.window
+        panel = w.rename_panel
+        panel.journal = Path(self.temp.name) / "rename.json"
+        paths = [Path(self.temp.name) / f"자료_{i}.pdf" for i in range(6)]
+        for path in paths:
+            path.write_bytes(b"unchanged")
+        w.files.add_paths(list(map(str, paths)))
+        w.show()
+        w.mode_tabs.setCurrentIndex(1)
+        panel.refresh()
+        QTest.qWait(50)
+        self.assertLessEqual(
+            w.files.visualItemRect(w.files.item(5)).bottom(), w.files.viewport().height()
+        )
+        self.assertEqual(panel.restore.text(), "실행 취소")
+        self.assertEqual(panel.restore.size(), panel.run.size())
+        self.assertGreater(panel.restore.x(), panel.run.geometry().right())
+        self.assertFalse(panel.restore.isEnabled())
+        panel.string.setText("새_")
+        panel.run.click()
+        self.assertTrue(panel.restore.isEnabled())
+        panel.restore.click()
+        self.assertFalse(panel.restore.isEnabled())
+        self.assertTrue(all(path.is_file() for path in paths))
+
+    def test_help_separates_tasks_and_excludes_developer_patch_notes(self):
+        from help_ui import HelpDialog
+
+        dialog = HelpDialog(self.window)
+        self.assertEqual(
+            [dialog.tabs.tabText(i) for i in range(3)],
+            ["파일 형식 변환", "파일명 변경", "패치노트"],
+        )
+        self.assertIn("실행 취소", dialog.rename_text.toPlainText())
+        self.assertNotIn("개발용", dialog.notes.toPlainText())
+        self.assertNotIn("dev.", dialog.notes.toPlainText())
+        dialog.reject()

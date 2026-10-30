@@ -55,13 +55,15 @@ public sealed class RenamePlanner(IFileStore files) {
         for(int i=0;i<rules.Count;i++) {
             var rule=rules[i];var source=Path.GetFullPath(rule.File.Path);string target=source,error="";FileStamp stamp=new(0,0,"");
             try {
-                stamp=files.Inspect(source);string stem=options.Base.Length>0?options.Base:Path.GetFileNameWithoutExtension(source);
-                if(options.Find.Length>0)stem=stem.Replace(options.Find,options.Replace,StringComparison.Ordinal);
-                stem=Names.Insert(stem,options.PerFile?rule.Extra:"",options.Position,options.Marker);
-                if(options.Number)stem=Names.Insert(stem,(checked(options.Start+i)).ToString("D"+Math.Clamp(options.Digits,1,8)),options.NumberPosition,options.NumberMarker,options.Separator);
-                stem=Names.Insert(stem,options.PerFile?"":options.Text,options.Position,options.Marker);
-                var ext=Path.GetExtension(source);var name=stem+ext;
+                stamp=files.Inspect(source);var ext=Path.GetExtension(source);string name;
                 if(!string.IsNullOrEmpty(rule.ManualName))name=rule.ManualName.EndsWith(ext,StringComparison.OrdinalIgnoreCase)?rule.ManualName:rule.ManualName+ext;
+                else {
+                    string stem=options.Base.Length>0?options.Base:Path.GetFileNameWithoutExtension(source);
+                    if(options.Find.Length>0)stem=stem.Replace(options.Find,options.Replace,StringComparison.Ordinal);
+                    stem=Names.Insert(stem,options.PerFile?rule.Extra:"",options.Position,options.Marker);
+                    if(options.Number)stem=Names.Insert(stem,(checked(options.Start+i)).ToString("D"+Math.Clamp(options.Digits,1,8)),options.NumberPosition,options.NumberMarker,options.Separator);
+                    stem=Names.Insert(stem,options.PerFile?"":options.Text,options.Position,options.Marker);name=stem+ext;
+                }
                 error=Names.Validate(name);if(error.Length==0)target=Path.Combine(Path.GetDirectoryName(source)!,name);
                 if(target.Length>240)error="전체 경로가 너무 깁니다. 이름을 줄여 주세요.";
             } catch(Exception e) when(e is IOException or UnauthorizedAccessException or ArgumentException or OverflowException) {error=e is ArgumentException?e.Message:"원본 파일 또는 이름 설정을 확인해 주세요.";}

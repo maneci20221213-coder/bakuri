@@ -5,13 +5,17 @@ using Bakuri.Infrastructure;
 namespace Bakuri.Desktop;
 
 public sealed class GlobalHotkey : IDisposable {
-    const int Id=0xBA01;readonly IntPtr hwnd;readonly HwndSource source;readonly Action action;
+    const int Id=0xBA01;readonly IntPtr hwnd;readonly HwndSource source;readonly Action action;string? currentKey;
     [DllImport("user32.dll",SetLastError=true)] static extern bool RegisterHotKey(IntPtr window,int id,uint modifiers,uint key);
     [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr window,int id);
     public GlobalHotkey(Window window,Action callback){hwnd=new WindowInteropHelper(window).Handle;source=HwndSource.FromHwnd(hwnd);action=callback;source.AddHook(Message);}
     public void Register(string key) {
         UnregisterHotKey(hwnd,Id);(uint mod,uint vk)=key switch{"F9"=>(0u,0x78u),"F8"=>(0u,0x77u),"Ctrl+Alt+B"=>(3u,0x42u),_=>(3u,0x78u)};
-        if(!RegisterHotKey(hwnd,Id,mod|0x4000,vk))throw new IOException("이 단축키를 다른 프로그램에서 사용 중입니다. 다른 키를 선택해 주세요.");
+        if(!RegisterHotKey(hwnd,Id,mod|0x4000,vk)) {
+            var previous=currentKey;currentKey=null;if(previous!=null)Register(previous);
+            throw new IOException("이 단축키를 다른 프로그램에서 사용 중입니다. 다른 키를 선택해 주세요.");
+        }
+        currentKey=key;
     }
     IntPtr Message(IntPtr handle,int message,IntPtr wParam,IntPtr lParam,ref bool handled){if(message==0x0312&&wParam.ToInt32()==Id){handled=true;action();}return IntPtr.Zero;}
     public void Dispose(){UnregisterHotKey(hwnd,Id);source.RemoveHook(Message);}

@@ -3,11 +3,15 @@ using Microsoft.Win32;
 using Bakuri.Core;
 namespace Bakuri.Infrastructure;
 
-/// <summary>Owned by one job's STA thread. Never attaches to the user's open Office processes.</summary>
+/// <summary>Owned by one job's STA thread. Uses CoCreateInstance rather than GetActiveObject; never quits a possibly shared pre-existing application.</summary>
 public sealed class OfficeEngine : IDisposable {
     readonly Dictionary<string,object> apps=new();
+    readonly HashSet<string> safeToQuit=new();
     dynamic App(string id) {
         if(apps.TryGetValue(id,out var existing))return existing;
+        string processName=id switch{"Word.Application"=>"WINWORD","Excel.Application"=>"EXCEL","PowerPoint.Application"=>"POWERPNT",_=>"Hwp"};
+        var existingProcesses=System.Diagnostics.Process.GetProcessesByName(processName);bool alreadyRunning=existingProcesses.Length>0;foreach(var process in existingProcesses)process.Dispose();
+        if(!alreadyRunning)safeToQuit.Add(id);
         var type=Type.GetTypeFromProgID(id)??throw new IOException("필요한 한글 또는 Office 프로그램을 설치해 주세요.");
         dynamic app=Activator.CreateInstance(type)??throw new IOException("문서 프로그램을 실행하지 못했습니다.");apps[id]=app;
         if(id=="Word.Application"||id=="Excel.Application"){app.Visible=false;app.DisplayAlerts=0;app.AutomationSecurity=3;}
@@ -87,5 +91,5 @@ public sealed class OfficeEngine : IDisposable {
             book.SaveAs(target,24);
         }finally{book.Close();Marshal.FinalReleaseComObject(book);}
     }
-    public void Dispose(){foreach(dynamic app in apps.Values){try{app.Quit();}catch(COMException){}finally{Marshal.FinalReleaseComObject(app);}}apps.Clear();}
+    public void Dispose(){foreach(var entry in apps){dynamic app=entry.Value;try{if(safeToQuit.Contains(entry.Key))app.Quit();}catch(Exception error){ConversionService.Log(error);}finally{Marshal.FinalReleaseComObject(app);}}apps.Clear();}
 }

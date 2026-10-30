@@ -33,6 +33,7 @@ internal static class Program {
     static void Rename(string root) {
         string directory=Path.Combine(root,"rename");Directory.CreateDirectory(directory);string a=Path.Combine(directory,"a.pdf"),b=Path.Combine(directory,"b.pdf");File.WriteAllText(a,"alpha");File.WriteAllText(b,"beta");
         var store=new FileStore();var journal=new JsonRenameJournal(Path.Combine(root,"rename-history.json"));var txn=new RenameTransaction(store,journal);var planner=new RenamePlanner(store);
+        var manual=planner.Preview([new(new(Guid.NewGuid(),a),ManualName:"직접.pdf")],new(Number:true,NumberPosition:InsertPosition.BeforeMarker,NumberMarker:"없는문자"));Check(manual[0].Error==""&&Path.GetFileName(manual[0].Target)=="직접.pdf","manual name overrides batch formatting");
         var files=new[]{new FileRule(new(Guid.NewGuid(),a),ManualName:"b.pdf"),new FileRule(new(Guid.NewGuid(),b),ManualName:"a.pdf")};var plan=planner.Preview(files,new());
         Check(plan.All(p=>p.Error==""),"preview permits safe filename swaps");txn.Apply(plan);Check(File.ReadAllText(a)=="beta"&&File.ReadAllText(b)=="alpha","two-phase filename swap keeps bytes");txn.Undo();Check(File.ReadAllText(a)=="alpha"&&File.ReadAllText(b)=="beta","undo restores original files");
         File.WriteAllText(Path.Combine(directory,"taken.pdf"),"external");var occupied=planner.Preview([new(new(Guid.NewGuid(),a),ManualName:"taken.pdf")],new());Check(occupied[0].Error.Length>0,"existing destination is blocked");Throws(()=>txn.Apply(occupied),"executor refuses invalid plan");

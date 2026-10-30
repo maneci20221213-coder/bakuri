@@ -23,7 +23,7 @@
         </TabControl>
         <DataGrid x:Name="FileGrid" Grid.Row="2" ItemsSource="{Binding Files}" IsEnabled="{Binding CanEdit}" CellEditEnding="CellEdited" PreviewKeyDown="GridKeyDown" CanUserSortColumns="False">
             <DataGrid.Columns>
-                <DataGridTemplateColumn Width="64">
+                <DataGridTemplateColumn Width="84">
                     <DataGridTemplateColumn.Header>
                         <CheckBox Content="선택" Checked="CheckAll" Unchecked="CheckAll"/>
                     </DataGridTemplateColumn.Header>

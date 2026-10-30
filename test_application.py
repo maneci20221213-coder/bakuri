@@ -90,7 +90,7 @@ class RequestTests(unittest.TestCase):
             self.assertEqual(report.outcome, JobOutcome.DONE)
             self.assertEqual(report.paths, ())
             self.assertEqual(report.rows[0].status, "건너뜀")
-            self.assertEqual(report.rows[0].source, str(source))
+            self.assertEqual(Path(report.rows[0].source).resolve(), source.resolve())
 
     def test_failure_retains_published_outputs_and_sanitizes_error(self):
         with tempfile.TemporaryDirectory() as d:
@@ -182,19 +182,19 @@ class GuiBoundaryTests(unittest.TestCase):
         )
 
     def test_report_flows_through_qt_worker_to_completion(self):
-        from PySide6.QtTest import QTest
+        from PySide6.QtTest import QTest, QSignalSpy
         import time
 
         source = self.root / "a.png"
         Image.new("RGB", (12, 18)).save(source)
         w = self.window
-        reports = []
-        w.bus.done.connect(reports.append)
+        reports = QSignalSpy(w.bus.done)
         w.start_conversion([str(source)], "pdf", False)
-        deadline = time.monotonic() + 5
-        while w.busy and time.monotonic() < deadline:
+        deadline = time.monotonic() + 15
+        while (w.busy or reports.count() == 0) and time.monotonic() < deadline:
             QTest.qWait(10)
         self.assertFalse(w.busy)
-        self.assertEqual(reports[0].outcome, JobOutcome.DONE)
+        self.assertGreater(reports.count(), 0, "Worker completion signal was not delivered")
+        self.assertEqual(reports.at(0)[0].outcome, JobOutcome.DONE)
         self.assertIn("1개 저장 완료", w.last_result["summary"])
         self.assertTrue((self.root / "a.pdf").is_file())

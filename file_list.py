@@ -1,7 +1,7 @@
 """Ordered, checked input files with batched duplicate lookup."""
 import os,re
 from pathlib import Path
-from PySide6.QtCore import Qt,Signal,QSize,QTimer
+from PySide6.QtCore import Qt,Signal,QSize,QTimer,QEvent
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (QApplication,QTreeWidget,QTreeWidgetItem,QHeaderView,QAbstractItemView,QLabel,QCheckBox,QMenu)
 from engine import SUPPORTED,SPREADSHEETS,IMAGES
@@ -27,6 +27,7 @@ class Files(QTreeWidget):
         self.master=QCheckBox(self.header().viewport()); self.master.setTristate(True); self.master.setToolTip('전체 선택 / 해제'); self.master.setAccessibleName('전체 선택')
         self.master.clicked.connect(lambda:self.check_all(Qt.Checked if self.master.checkState()!=Qt.Unchecked else Qt.Unchecked))
         self.header().sectionResized.connect(self.place_master); self.header().geometriesChanged.connect(self.place_master); self.header().sectionMoved.connect(self.place_master); self.itemChanged.connect(lambda item,column:self.sync_master() if column==0 else None); self.place_master()
+        self.manual_sizing=False;self.header().viewport().installEventFilter(self)
         self.fit_timer=QTimer(self);self.fit_timer.setSingleShot(True);self.fit_timer.timeout.connect(self.fit_name_columns)
         self.reflow_timer=QTimer(self);self.reflow_timer.setSingleShot(True);self.reflow_timer.timeout.connect(self.reflow_names)
         self.changed.connect(self.request_name_fit);self.header().sectionResized.connect(self.name_column_resized)
@@ -36,7 +37,13 @@ class Files(QTreeWidget):
     def resizeEvent(self,event):
         super().resizeEvent(event)
         if hasattr(self,'fit_timer'):self.request_name_fit()
-    def request_name_fit(self):self.fit_timer.start(0)
+    def eventFilter(self,obj,event):
+        if obj is self.header().viewport():
+            if event.type()==QEvent.MouseButtonPress:self.manual_sizing=True;self.fit_timer.stop()
+            elif event.type()==QEvent.MouseButtonRelease:self.manual_sizing=False
+        return super().eventFilter(obj,event)
+    def request_name_fit(self):
+        if not self.manual_sizing:self.fit_timer.start(0)
     def reflow_names(self):self.scheduleDelayedItemsLayout();self.viewport().update()
     def fit_name_columns(self):
         columns=[c for c in (2,4) if c<self.columnCount() and not self.isColumnHidden(c)]

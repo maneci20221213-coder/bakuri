@@ -66,7 +66,7 @@ class RenameListTests(unittest.TestCase):
   self.assertEqual(item.text(6),'앞뒤');self.assertEqual(files.item(1).text(6),'')
 
  def test_independent_column_widths_and_compact_status(self):
-  files=self.w.files;self.panel.text_enabled.setChecked(True);APP.processEvents()
+  files=self.w.files;self.panel.text_enabled.setChecked(True);QTest.qWait(20)
   self.assertEqual(files.headerItem().text(6),'추가할 문자열')
   widths={column:files.columnWidth(column) for column in [2,4,5,6]}
   self.assertLess(widths[5],150)

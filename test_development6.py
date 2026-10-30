@@ -2,7 +2,8 @@ import os,tempfile,types,unittest
 os.environ['QT_QPA_PLATFORM']='offscreen'
 from pathlib import Path
 from unittest.mock import Mock,patch
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt,QEvent
+from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QApplication
 from file_names import name_lines
 from file_list import Files
@@ -34,6 +35,16 @@ class NameDisplayTests(unittest.TestCase):
     self.assertGreater(f.columnWidth(4),before)
     self.assertGreaterEqual(f.visualItemRect(f.item(0)).height(),60)
    finally:f.hide();f.deleteLater()
+ def test_manual_header_drag_cancels_pending_auto_fit(self):
+  f=Files();f.request_name_fit();self.assertTrue(f.fit_timer.isActive())
+  try:
+   # Header press/release follows the same event filter path as a native drag.
+   from PySide6.QtCore import QPointF
+   press=QMouseEvent(QEvent.MouseButtonPress,QPointF(100,10),QPointF(100,10),Qt.LeftButton,Qt.LeftButton,Qt.NoModifier)
+   f.eventFilter(f.header().viewport(),press);self.assertFalse(f.fit_timer.isActive());f.request_name_fit();self.assertFalse(f.fit_timer.isActive())
+   release=QMouseEvent(QEvent.MouseButtonRelease,QPointF(100,10),QPointF(100,10),Qt.LeftButton,Qt.NoButton,Qt.NoModifier)
+   f.eventFilter(f.header().viewport(),release);f.request_name_fit();self.assertTrue(f.fit_timer.isActive())
+  finally:f.deleteLater()
  def test_row_height_grows_for_three_lines_and_shrinks_on_widening(self):
   from PySide6.QtWidgets import QTreeWidgetItem
   f=Files();f.setStyleSheet(f.styleSheet()+'QTreeWidget {font-size:20px;}');f.resize(800,300);f.addTopLevelItem(QTreeWidgetItem(['','','x'*50+'.pdf','']))

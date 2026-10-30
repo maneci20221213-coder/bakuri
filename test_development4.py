@@ -89,7 +89,7 @@ class RenameListTests(unittest.TestCase):
   self.assertEqual(self.w.files.item(0).text(4),'a첫째.PDF');self.assertTrue(panel.string_marker.isVisible())
   panel.text_enabled.setChecked(False);panel.string.setText('공통');self.assertEqual(self.w.files.item(0).text(4),'a공통.PDF')
  def test_simple_summary_and_shared_row_layout(self):
-  panel=self.panel;self.assertEqual(panel.message.text(),'0개 변경 예정 · 오류 0개')
+  panel=self.panel;self.assertEqual(panel.message.text(),'변경 예정 0개 / 오류 0개')
   self.assertFalse(hasattr(panel,'replace_name'));self.assertFalse(hasattr(panel,'text_position'))
   self.assertGreaterEqual(panel.layout().contentsMargins().left(),20)
   panel.text_enabled.setChecked(True);APP.processEvents()

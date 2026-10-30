@@ -15,7 +15,7 @@ class HelpTests(unittest.TestCase):
   w=Window();w.show();w.activateWindow();APP.processEvents()
   settings=w.findChild(QPushButton,'settings')
   self.assertEqual(w.help_button.text(),'?');self.assertGreaterEqual(w.help_button.x(),settings.geometry().right())
-  with patch('app.HelpDialog') as dialog,patch.object(w.updater,'request') as check:
+  with patch('bakuri.ui.main_window.HelpDialog') as dialog,patch.object(w.updater,'request') as check:
    QTest.mouseClick(w.help_button,Qt.LeftButton);QTest.keyClick(w,Qt.Key_F1)
    self.assertEqual(dialog.return_value.exec.call_count,2);check.assert_not_called()
   w.tray.hide();w.hide();w.deleteLater()
@@ -27,9 +27,9 @@ class HelpTests(unittest.TestCase):
  def test_help_tabs_and_removed_repair_actions_and_tray_entry(self):
   from app import SettingsDialog
   w=Window();dialog=HelpDialog(w)
-  self.assertEqual([dialog.tabs.tabText(i) for i in range(dialog.tabs.count())],['사용 설명','패치노트'])
-  self.assertIn('0.15.0',dialog.notes.toPlainText())
-  dialog.tabs.setCurrentIndex(1);self.assertEqual(dialog.tabs.currentWidget(),dialog.notes)
+  self.assertEqual([dialog.tabs.tabText(i) for i in range(dialog.tabs.count())],['파일 형식 변환','파일명 변경','패치노트'])
+  self.assertIn(__import__('version').VERSION,dialog.notes.toPlainText())
+  dialog.tabs.setCurrentIndex(2);self.assertEqual(dialog.tabs.currentWidget(),dialog.notes)
   self.assertNotIn('단축키 다시 연결',[a.text() for a in w.tray.contextMenu().actions()])
   settings=SettingsDialog(w)
   self.assertNotIn('우클릭 메뉴 다시 등록',[b.text() for b in settings.findChildren(QPushButton)])
@@ -49,7 +49,7 @@ class HelpTests(unittest.TestCase):
   root=Path(__file__).parent
   self.assertIn('## 빌드·배포',(root/'DEVELOPER-README.md').read_text(encoding='utf-8'))
   self.assertNotIn('py -3.12',(root/'README.md').read_text(encoding='utf-8'))
-  for name in ['build_release.ps1','build_exe.bat']:self.assertIn('USER-GUIDE.md;.',(root/name).read_text(encoding='utf-8'));self.assertIn('PATCH-NOTES.md;.',(root/name).read_text(encoding='utf-8'))
+  for name in ['build_release.ps1','build_exe.bat']:self.assertIn('USER-GUIDE.md;.',(root/name).read_text(encoding='utf-8'));self.assertIn('PATCH-NOTES.md;.',(root/name).read_text(encoding='utf-8'));self.assertIn('RENAME-GUIDE.md;.',(root/name).read_text(encoding='utf-8'))
 
 class UserMessageTests(unittest.TestCase):
  def test_user_messages_hide_technical_details_and_offer_a_next_step(self):
@@ -80,7 +80,7 @@ class UserMessageTests(unittest.TestCase):
    logger.handlers=old
  def test_job_result_dialog_never_shows_raw_exception(self):
   w=Window()
-  with patch('app.QMessageBox.warning') as warning,patch('user_messages.log_error'):
+  with patch('bakuri.ui.main_window.QMessageBox.warning') as warning,patch('user_messages.log_error'):
    w.finished(dict(paths=[],rows=[],outcome='failed',error='COM SECRET trace',kind='convert'))
    warning.assert_not_called();self.assertNotIn('SECRET',w.last_result['summary']);self.assertIn('원본',w.last_result['summary'])
   w.tray.hide();w.hide();w.deleteLater()

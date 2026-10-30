@@ -15,3 +15,6 @@ TEST-RESULTS.txt
 TEST-SUMMARY.json
 BUILD-REPORT.json
 BakuriFileConverter.exe
+
+DevArtifacts/
+.ruff_cache/

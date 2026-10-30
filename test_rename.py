@@ -46,13 +46,13 @@ class RenameTests(unittest.TestCase):
   with self.assertRaises(ValueError):undo(self.journal)
   self.assertEqual(a.read_bytes(),b'external')
  def test_partial_failure_rolls_back_and_does_not_overwrite(self):
-  import rename_engine
-  a=self.file('a.pdf',b'a');b=self.file('b.pdf',b'b');real=rename_engine.move;calls=[]
+  import bakuri.renaming.transaction
+  a=self.file('a.pdf',b'a');b=self.file('b.pdf',b'b');real=bakuri.renaming.transaction.move;calls=[]
   def failing(src,dst):
    calls.append(dst)
    if len(calls)==4:raise PermissionError('locked')
    return real(src,dst)
-  with patch('rename_engine.move',side_effect=failing),self.assertRaises(RuntimeError):apply(preview([a,b],prefix='new_'),self.journal)
+  with patch('bakuri.renaming.transaction.move',side_effect=failing),self.assertRaises(RuntimeError):apply(preview([a,b],prefix='new_'),self.journal)
   self.assertEqual(a.read_bytes(),b'a');self.assertEqual(b.read_bytes(),b'b');self.assertFalse(list(self.root.glob('.bakuri-rename-*')))
   self.assertEqual(json.loads(self.journal.read_text())['state'],'rolled_back')
  def test_same_names_across_folders_and_noop(self):

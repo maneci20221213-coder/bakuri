@@ -4,14 +4,14 @@ Set-Location $PSScriptRoot
 if ($RepositoryUrl -notmatch '^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/?$') { throw 'Use a public GitHub repository URL.' }
 $RepositoryUrl=$RepositoryUrl.TrimEnd('/')
 $Version=[regex]::Match((Get-Content 'version.py' -Raw),'VERSION\s*=\s*"([^"]+)"').Groups[1].Value
-if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid app version.' }
+if ($Version -notmatch '^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$') { throw 'Invalid app version.' }
 function RunChecked([scriptblock]$Command) { & $Command; if ($LASTEXITCODE -ne 0) { throw "Command failed: $Command" } }
 if (-not (Test-Path '.release-venv\Scripts\python.exe')) { RunChecked { py -3.12 -m venv .release-venv } }
 $Python=Join-Path $PSScriptRoot '.release-venv\Scripts\python.exe'
 RunChecked { & $Python -m pip install -r requirements.txt pyinstaller==6.16.0 }
 RunChecked { & $Python build_metadata.py }
 RunChecked { & $Python verify_popup.py }
-RunChecked { & $Python -m PyInstaller --noconfirm --clean --noupx --windowed --onedir --name BakuriFileConverter --icon assets/app.ico --version-file version-resource.txt --add-data 'assets;assets' --add-data 'USER-GUIDE.md;.' --add-data 'PATCH-NOTES.md;.' --add-data 'LICENSES;LICENSES' --add-data 'LICENSE-AGPL-3.0.txt;.' --add-data 'README.md;.' --add-binary 'FilePathCheckerModuleExample.dll;.' --hidden-import win32timezone --hidden-import win32com.shell.shell --exclude-module PIL.AvifImagePlugin --exclude-module PIL._avif --collect-submodules pynput --collect-all velopack app.py }
+RunChecked { & $Python -m PyInstaller --noconfirm --clean --noupx --windowed --onedir --name BakuriFileConverter --icon assets/app.ico --version-file version-resource.txt --add-data 'assets;assets' --add-data 'USER-GUIDE.md;.' --add-data 'RENAME-GUIDE.md;.' --add-data 'PATCH-NOTES.md;.' --add-data 'LICENSES;LICENSES' --add-data 'LICENSE-AGPL-3.0.txt;.' --add-data 'README.md;.' --add-binary 'FilePathCheckerModuleExample.dll;.' --hidden-import win32timezone --hidden-import win32com.shell.shell --exclude-module PIL.AvifImagePlugin --exclude-module PIL._avif --collect-submodules pynput --collect-all velopack app.py }
 $PackDir=Join-Path $PSScriptRoot 'dist\BakuriFileConverter'
 @{source='github';url=$RepositoryUrl;channel='stable'} | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $PackDir 'update-config.json')
 Copy-Item 'LICENSES' (Join-Path $PackDir 'LICENSES') -Recurse -Force

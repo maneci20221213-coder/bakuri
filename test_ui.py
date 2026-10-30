@@ -23,7 +23,7 @@ class UiTests(unittest.TestCase):
   w=Window(); dialog=SettingsDialog(w)
   self.assertEqual(dialog.key.count(),4)
   self.assertIn('설정',[a.text() for a in w.tray.contextMenu().actions()])
-  self.assertIn('0.15.0',w.windowTitle());self.assertNotIn('시험',w.windowTitle())
+  self.assertIn(__import__('version').VERSION,w.windowTitle());self.assertNotIn('시험',w.windowTitle())
   w.tray.hide(); w.deleteLater()
 
 class PopupTests(unittest.TestCase):
@@ -164,9 +164,9 @@ class JobUiTests(unittest.TestCase):
   from PySide6.QtTest import QTest
   from jobs import Cancelled
   for stop_from_tray in [True,False]:
-   w=Window();w.settings.setValue('notify',False);entered=threading.Event();release=threading.Event()
+   w=Window();w.settings.setValue('notify',False);entered=threading.Event();release=threading.Event();self.addCleanup(release.set)
    def operation(control):
-    control.update(37,'test measured units');entered.set();release.wait(2);control.check()
+    control.update(37,'test measured units');entered.set();release.wait(30);control.check()
    center=QPoint(400,300);w.begin_job(operation,'convert',center);self.assertTrue(entered.wait(1));app.processEvents()
    self.assertEqual(w.run.text(),'작업 중지');self.assertTrue(w.run.isEnabled());self.assertIn('37%',w.tray.toolTip());self.assertTrue(w.tray_stop_action.isEnabled())
    if stop_from_tray:w.tray_stop_action.trigger()

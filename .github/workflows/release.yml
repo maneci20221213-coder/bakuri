@@ -34,18 +34,22 @@ jobs:
         shell: pwsh
         run: |
           $Version=python -c "from version import VERSION; print(VERSION)"
-          if ($LASTEXITCODE -ne 0 -or $Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid version' }
+          if ($LASTEXITCODE -ne 0 -or $Version -notmatch '^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$') { throw 'Invalid version' }
           "version=$Version" >> $env:GITHUB_OUTPUT
       - name: Install test dependencies
         shell: pwsh
         run: |
-          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
           if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
       - name: Regression tests
         shell: pwsh
         run: |
           python -m unittest discover -v
           if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
+          python verify_completion_ui.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native completion/layout verification failed' }
+          python -c "import subprocess,sys; subprocess.run([sys.executable,'verify_reorder.py'],check=True,timeout=25)"
+          if ($LASTEXITCODE -ne 0) { throw 'Native file drag verification failed' }
       - name: Build installer and update feed
         shell: pwsh
         run: ./build_release.ps1 -RepositoryUrl $env:BAKURI_REPOSITORY_URL
@@ -63,6 +67,7 @@ jobs:
           BAKURI_PUBLISH: ${{ inputs.publish }}
         run: |
           $Tag="v$env:BAKURI_VERSION"
+          $PreRelease=$env:BAKURI_VERSION.Contains('-')
           $Files=@(Get-ChildItem Releases -File | ForEach-Object FullName)
           $Existing=& gh release view $Tag --repo $env:GITHUB_REPOSITORY --json isDraft 2>$null
           if ($LASTEXITCODE -eq 0) {
@@ -70,12 +75,13 @@ jobs:
             & gh release upload $Tag --repo $env:GITHUB_REPOSITORY --clobber @Files
             if ($LASTEXITCODE -ne 0) { throw 'Draft asset upload failed.' }
             $Edit=@('release','edit',$Tag,'--repo',$env:GITHUB_REPOSITORY,'--target',$env:GITHUB_SHA,'--title',"바꾸리 $env:BAKURI_VERSION",'--notes-file','RELEASE-NOTES.md')
-            if ($env:BAKURI_PUBLISH -eq 'true') { $Edit+=@('--draft=false','--latest') }
+            if ($env:BAKURI_PUBLISH -eq 'true') { $Edit+='--draft=false'; if ($PreRelease) { $Edit+=@('--prerelease','--latest=false') } else { $Edit+=@('--prerelease=false','--latest') } }
             & gh @Edit
             if ($LASTEXITCODE -ne 0) { throw 'Draft release update failed.' }
             exit 0
           }
           $Arguments=@('release','create',$Tag,'--repo',$env:GITHUB_REPOSITORY,'--target',$env:GITHUB_SHA,'--title',"바꾸리 $env:BAKURI_VERSION",'--notes-file','RELEASE-NOTES.md')
+          if ($PreRelease) { $Arguments+=@('--prerelease','--latest=false') }
           if ($env:BAKURI_PUBLISH -ne 'true') { $Arguments+='--draft' }
           & gh @Arguments @Files
           if ($LASTEXITCODE -ne 0) { throw 'Release creation failed; do not overwrite an existing published version.' }

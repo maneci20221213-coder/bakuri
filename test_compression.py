@@ -34,7 +34,7 @@ class CompressionTests(unittest.TestCase):
    qualities=[];dimensions=[]
    def encode(image,fmt,quality=92,strip=False):
     qualities.append(quality);dimensions.append(max(image.size));out=io.BytesIO();image.save(out,'JPEG');return out.getvalue()+b'0'*TARGET_BYTES
-   with patch('compression.encoded',encode):
+   with patch('bakuri.compression.images.encoded',encode):
     target,suffix,detail=compress_image(path,d,'size',False,False,lambda:None,lambda f:None)
    self.assertGreater(target.stat().st_size,TARGET_BYTES);self.assertIn('목표 미달',detail);self.assertGreaterEqual(min(qualities),82);self.assertGreaterEqual(min(dimensions),1600)
  def test_animation_skipped_without_losing_frames(self):

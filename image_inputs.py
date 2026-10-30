@@ -3,7 +3,7 @@ from pathlib import Path
 from PIL import Image, ImageOps
 import shutil
 
-IMAGES={'.png','.jpg','.jpeg','.bmp','.gif','.tif','.tiff','.webp','.ico'}
+from bakuri.domain.formats import IMAGES
 
 def frames(path):
     """TIFF: every page; animated images: first displayed frame only."""

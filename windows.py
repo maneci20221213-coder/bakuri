@@ -167,7 +167,7 @@ def register_hancom(app):
     except Exception: return False
 
 def menu_roots():
-    from engine import SUPPORTED
+    from bakuri.domain.formats import SUPPORTED
     extensions=set(SUPPORTED)
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER,r'Software\Classes\SystemFileAssociations') as key:
@@ -196,7 +196,7 @@ def migrate_menu(enabled):
     return enabled
 
 def register_menu(enabled):
-    from engine import SUPPORTED
+    from bakuri.domain.formats import SUPPORTED
     for root in menu_roots():
         delete_menu_key(root+r'\BakuriConvert')
         delete_menu_key(root+r'\BakuriPythonTrial')

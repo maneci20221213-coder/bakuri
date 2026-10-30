@@ -10,7 +10,14 @@ public sealed class ConversionService(StaRunner runner) : IConversionService {
         if(request.Merge&&!Capabilities.CanMerge(request.Files.Select(f=>f.Path),request.Format))throw new ArgumentException("이 파일은 선택한 형식으로 합칠 수 없습니다.");
         var clock=Stopwatch.StartNew();var results=new List<FileResult>();using var work=new WorkDirectory();using var office=new OfficeEngine();var pdf=new PdfEngine();bool cancelled=false;
         IReadOnlyList<ImagePage> Pages(IReadOnlyList<string> paths) {
-            var all=new List<ImagePage>();foreach(var path in paths){cancel.ThrowIfCancellationRequested();if(Path.GetExtension(path).Equals(".pdf",StringComparison.OrdinalIgnoreCase))all.AddRange(pdf.Render(path,work,request.Format==OutputFormat.Hwpx?300:request.Dpi,cancel));else all.AddRange(Images.Load(path).Select(b=>new ImagePage(Images.CanEmbedOriginal(path)?path:Images.Stage(b,work),b.PixelWidth*72d/150,b.PixelHeight*72d/150)));}return all;
+            var all=new List<ImagePage>();
+            foreach(var path in paths) {
+                cancel.ThrowIfCancellationRequested();
+                if(Path.GetExtension(path).Equals(".pdf",StringComparison.OrdinalIgnoreCase))all.AddRange(pdf.Render(path,work,request.Format==OutputFormat.Hwpx?300:request.Dpi,cancel));
+                else if(Images.OriginalGeometry(path) is {} geometry)all.Add(new(path,geometry.Width*72d/150,geometry.Height*72d/150));
+                else all.AddRange(Images.Load(path).Select(b=>new ImagePage(Images.Stage(b,work),b.PixelWidth*72d/150,b.PixelHeight*72d/150)));
+            }
+            return all;
         }
         string AsPdf(string source){if(Path.GetExtension(source).Equals(".pdf",StringComparison.OrdinalIgnoreCase))return source;var target=work.File("pdf");if(Capabilities.IsImage(source))pdf.FromImages(source,target,work,cancel);else office.Export(source,target,OutputFormat.Pdf,cancel);return target;}
         void Publish(string source,string staged,string preferred,long before=0) {cancel.ThrowIfCancellationRequested();var target=OutputPublisher.Publish(staged,preferred,cancel);results.Add(new(source,target,FileOutcome.Saved,before,new FileInfo(target).Length,"저장 완료"));}

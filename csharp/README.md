@@ -44,4 +44,4 @@ dotnet run --project csharp/tests/Bakuri.Checks -c Release -r win-x64
 ./csharp/scripts/build.ps1
 ```
 
-GitHub `experiment/csharp` 브랜치의 **CSharp experiment** Actions에서 ZIP 두 종류, 소스, 실제 측정 JSON과 화면을 받습니다. 정식 릴리즈와 업데이트 피드에 게시하지 않습니다. 압축 크기는 측정 JSON의 `Packages`, 변환 비교는 `native-benchmark.json`과 `python-benchmark.json`을 확인하세요. CI의 합성 PNG 12개를 합치는 한 가지 시나리오이므로 실제 한글·Office 성능이나 모든 PDF의 성능을 대표하지 않습니다. V3 검사 결과는 빌드 검사로 보장할 수 없습니다.
+GitHub `experiment/csharp` 브랜치의 **CSharp experiment** Actions에서 ZIP 두 종류, 소스, 실제 측정 JSON과 화면을 받습니다. 정식 릴리즈와 업데이트 피드에 게시하지 않습니다. 압축 크기는 측정 JSON의 `Packages`, 변환 비교는 `native-benchmark.json`과 `python-benchmark.json`을 확인하세요. CI의 합성 PNG 12개를 합치는 작업을 새 프로세스에서 각각 3회 실행한 중앙값을 비교하는 한 가지 시나리오이므로 실제 한글·Office 성능이나 모든 PDF의 성능을 대표하지 않습니다. V3 검사 결과는 빌드 검사로 보장할 수 없습니다.

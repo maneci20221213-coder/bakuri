@@ -8,13 +8,14 @@ Run { dotnet build csharp/tests/Bakuri.Checks/Bakuri.Checks.csproj -c Release -r
 $Checks=(Get-ChildItem csharp/tests/Bakuri.Checks/bin/Release -Filter Bakuri.Checks.dll -Recurse | Select-Object -First 1).FullName
 Run { dotnet $Checks --check "$Artifacts/checks" }
 Run { dotnet list csharp/src/Bakuri.Desktop/Bakuri.Desktop.csproj package --include-transitive --format json | Out-File -Encoding utf8 "$Artifacts/dependencies.json" }
-Run { dotnet format whitespace csharp/src/Bakuri.Desktop/Bakuri.Desktop.csproj --no-restore }
-Run { dotnet format whitespace csharp/tests/Bakuri.Checks/Bakuri.Checks.csproj --no-restore }
+Run { dotnet format whitespace csharp --folder --verbosity normal }
 $Results=@()
 foreach ($Kind in @('FrameworkDependent','SelfContained')) {
  $Folder=Join-Path $Artifacts $Kind
  $SelfContained=($Kind -eq 'SelfContained').ToString().ToLower()
  Run { dotnet publish csharp/src/Bakuri.Desktop/Bakuri.Desktop.csproj -c Release -r win-x64 --self-contained $SelfContained -o $Folder }
+ # Native debug symbols are not runtime dependencies (Skia ships an 80 MB PDB).
+ Get-ChildItem $Folder -Filter '*.pdb' -File -Recurse | Remove-Item -Force
  Copy-Item LICENSE-AGPL-3.0.txt "$Folder/LICENSE-AGPL-3.0.txt" -Force
  $Notice=Join-Path $Folder 'third-party-notices';New-Item -ItemType Directory -Force $Notice | Out-Null
  Get-ChildItem "$env:USERPROFILE/.nuget/packages" -Recurse -File | Where-Object { $_.Name -match '^(LICENSE|COPYING|NOTICE)' -and $_.Extension -notin @('.dll','.nupkg') } | ForEach-Object {
@@ -27,10 +28,19 @@ foreach ($Kind in @('FrameworkDependent','SelfContained')) {
 }
 $Benchmark=Join-Path $Artifacts 'comparison';New-Item -ItemType Directory -Force $Benchmark | Out-Null
 Run { dotnet $Checks --corpus $Benchmark }
-$Clock=[Diagnostics.Stopwatch]::StartNew();Run { dotnet $Checks --benchmark $Benchmark };$Clock.Stop();$NativeWall=$Clock.Elapsed.TotalMilliseconds
 Run { python -m pip install Pillow==11.3.0 PyMuPDF==1.26.7 }
-$Clock.Restart();Run { python csharp/scripts/benchmark_python.py $Benchmark };$Clock.Stop();$PythonWall=$Clock.Elapsed.TotalMilliseconds
-$Report=@{Packages=$Results;NativeProcessWallMs=$NativeWall;PythonProcessWallMs=$PythonWall;Scenario='12 synthetic 1600x1200 PNG files -> one PDF; one fresh process per implementation';Native=(Get-Content "$Benchmark/native-benchmark.json" -Raw|ConvertFrom-Json);Python=(Get-Content "$Benchmark/python-benchmark.json" -Raw|ConvertFrom-Json)}
+$Trials=@()
+for($Round=0;$Round -lt 3;$Round++) {
+ $Times=@{};$Order=if($Round%2 -eq 0){@('Native','Python')}else{@('Python','Native')}
+ foreach($Implementation in $Order) {
+  $Clock=[Diagnostics.Stopwatch]::StartNew()
+  if($Implementation -eq 'Native'){Run { dotnet $Checks --benchmark $Benchmark }}else{Run { python csharp/scripts/benchmark_python.py $Benchmark }}
+  $Clock.Stop();$Times[$Implementation]=$Clock.Elapsed.TotalMilliseconds
+ }
+ $Trials+=@{Native=(Get-Content "$Benchmark/native-benchmark.json" -Raw|ConvertFrom-Json);Python=(Get-Content "$Benchmark/python-benchmark.json" -Raw|ConvertFrom-Json);NativeProcessWallMs=$Times.Native;PythonProcessWallMs=$Times.Python}
+}
+$NativeMedian=@($Trials.Native|Sort-Object ElapsedMs)[1];$PythonMedian=@($Trials.Python|Sort-Object ElapsedMs)[1]
+$Report=@{Packages=$Results;NativeProcessWallMs=@($Trials.NativeProcessWallMs|Sort-Object)[1];PythonProcessWallMs=@($Trials.PythonProcessWallMs|Sort-Object)[1];Scenario='12 synthetic 1600x1200 PNG files -> one PDF; median of 3 fresh processes per implementation, alternating order';Native=$NativeMedian;Python=$PythonMedian;Trials=$Trials}
 $Report|ConvertTo-Json -Depth 6|Set-Content -Encoding utf8 "$Artifacts/comparison.json"
 Copy-Item "$Benchmark/*benchmark.json" $Artifacts
 & "$PSScriptRoot/verify-window.ps1" -Exe "$Artifacts/SelfContained/BakuriCSharpTrial.exe" -Corpus $Benchmark -Screenshot "$Artifacts/Bakuri-CSharp-UI.png"

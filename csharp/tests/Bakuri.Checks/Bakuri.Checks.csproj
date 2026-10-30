@@ -1,1 +1,11 @@
-<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0-windows</TargetFramework><UseWPF>true</UseWPF><OutputType>Exe</OutputType></PropertyGroup><ItemGroup><ProjectReference Include="../../src/Bakuri.Infrastructure/Bakuri.Infrastructure.csproj"/></ItemGroup></Project>
+<?xml version="1.0" ?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows</TargetFramework>
+        <UseWPF>true</UseWPF>
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../../src/Bakuri.Infrastructure/Bakuri.Infrastructure.csproj"/>
+    </ItemGroup>
+</Project>

@@ -1,1 +1,22 @@
-<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0-windows</TargetFramework><OutputType>WinExe</OutputType><UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms><ImplicitUsings>disable</ImplicitUsings><AssemblyName>BakuriCSharpTrial</AssemblyName><ApplicationIcon>../../../assets/app.ico</ApplicationIcon><RuntimeIdentifier>win-x64</RuntimeIdentifier><PublishSingleFile>false</PublishSingleFile></PropertyGroup><ItemGroup><ProjectReference Include="../Bakuri.Infrastructure/Bakuri.Infrastructure.csproj"/><Content Include="../../../assets/app.ico" Link="app.ico" CopyToOutputDirectory="PreserveNewest"/><Content Include="../../../assets/tray.png" Link="tray.png" CopyToOutputDirectory="PreserveNewest"/><Content Include="../../../FilePathCheckerModuleExample.dll" Link="FilePathCheckerModuleExample.dll" CopyToOutputDirectory="PreserveNewest"/><Content Include="../../../LICENSE-AGPL-3.0.txt" Link="LICENSE-AGPL-3.0.txt" CopyToOutputDirectory="PreserveNewest"/><Content Include="../../README.md" Link="사용설명.md" CopyToOutputDirectory="PreserveNewest"/></ItemGroup></Project>
+<?xml version="1.0" ?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows</TargetFramework>
+        <OutputType>WinExe</OutputType>
+        <UseWPF>true</UseWPF>
+        <UseWindowsForms>true</UseWindowsForms>
+        <ImplicitUsings>disable</ImplicitUsings>
+        <AssemblyName>BakuriCSharpTrial</AssemblyName>
+        <ApplicationIcon>../../../assets/app.ico</ApplicationIcon>
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <PublishSingleFile>false</PublishSingleFile>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Bakuri.Infrastructure/Bakuri.Infrastructure.csproj"/>
+        <Content Include="../../../assets/app.ico" Link="app.ico" CopyToOutputDirectory="PreserveNewest"/>
+        <Content Include="../../../assets/tray.png" Link="tray.png" CopyToOutputDirectory="PreserveNewest"/>
+        <Content Include="../../../FilePathCheckerModuleExample.dll" Link="FilePathCheckerModuleExample.dll" CopyToOutputDirectory="PreserveNewest"/>
+        <Content Include="../../../LICENSE-AGPL-3.0.txt" Link="LICENSE-AGPL-3.0.txt" CopyToOutputDirectory="PreserveNewest"/>
+        <Content Include="../../README.md" Link="사용설명.md" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
+</Project>

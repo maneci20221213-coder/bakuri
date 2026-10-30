@@ -12,6 +12,9 @@ start=time.perf_counter();results=convert(paths,'pdf',merge=True);elapsed=(time.
 class Memory(ctypes.Structure):
  _fields_=[('cb',ctypes.c_ulong),('page_faults',ctypes.c_ulong)]+[(n,ctypes.c_size_t) for n in ['peak_working_set','working_set','quota_peak_paged','quota_paged','quota_peak_nonpaged','quota_nonpaged','pagefile','peak_pagefile']]
 memory=Memory();memory.cb=ctypes.sizeof(memory)
-ctypes.windll.psapi.GetProcessMemoryInfo(ctypes.windll.kernel32.GetCurrentProcess(),ctypes.byref(memory),memory.cb)
+ctypes.windll.kernel32.GetCurrentProcess.restype=ctypes.c_void_p
+ctypes.windll.psapi.GetProcessMemoryInfo.argtypes=[ctypes.c_void_p,ctypes.POINTER(Memory),ctypes.c_ulong]
+ctypes.windll.psapi.GetProcessMemoryInfo.restype=ctypes.c_int
+if not ctypes.windll.psapi.GetProcessMemoryInfo(ctypes.windll.kernel32.GetCurrentProcess(),ctypes.byref(memory),memory.cb):raise RuntimeError('Cannot read benchmark memory counter')
 data=dict(Engine='Python / PyMuPDF '+fitz.VersionBind,Files=len(paths),ElapsedMs=elapsed,OutputBytes=sum(Path(p).stat().st_size for p in results),PeakWorkingSetBytes=memory.peak_working_set)
 (root/'python-benchmark.json').write_text(json.dumps(data,indent=2),encoding='utf-8');print(json.dumps(data))

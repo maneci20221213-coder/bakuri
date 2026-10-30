@@ -10,7 +10,12 @@ public sealed class PdfEngine {
         cancel.ThrowIfCancellationRequested();Save(merged,target);
     }
     public void FromImages(string path,string target,WorkDirectory work,CancellationToken cancel) {
-        using var pdf=new Document();var frames=Images.Load(path);
+        using var pdf=new Document();
+        if(Images.OriginalGeometry(path) is {} geometry) {
+            cancel.ThrowIfCancellationRequested();var page=pdf.NewPage(width:(float)(geometry.Width*72d/150),height:(float)(geometry.Height*72d/150));
+            page.InsertImage(page.Rect,filename:path);Save(pdf,target);return;
+        }
+        var frames=Images.Load(path);
         foreach(var frame in frames) {
             cancel.ThrowIfCancellationRequested();var page=pdf.NewPage(width:(float)(frame.PixelWidth*72d/150),height:(float)(frame.PixelHeight*72d/150));
             // WIC normalizes orientation; PNG stays lossless, and original JPEG streams avoid recompression.

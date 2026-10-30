@@ -26,8 +26,16 @@ public static class Images {
     public static bool CanEmbedOriginal(string path) {
         if(Path.GetExtension(path).Equals(".png",StringComparison.OrdinalIgnoreCase))return true;
         if(!(Path.GetExtension(path).ToLowerInvariant() is ".jpg" or ".jpeg"))return false;
-        using var stream=File.OpenRead(path);var decoder=BitmapDecoder.Create(stream,BitmapCreateOptions.PreservePixelFormat,BitmapCacheOption.OnLoad);
+        using var stream=File.OpenRead(path);var decoder=BitmapDecoder.Create(stream,BitmapCreateOptions.PreservePixelFormat,BitmapCacheOption.None);
         try {return decoder.Frames[0].Metadata is not BitmapMetadata metadata||metadata.GetQuery("/app1/ifd/{ushort=274}") is not ushort orientation||orientation==1;}catch(NotSupportedException){return false;}
+    }
+    public static (int Width,int Height)? OriginalGeometry(string path) {
+        if(!CanEmbedOriginal(path))return null;
+        using var stream=File.OpenRead(path);
+        var decoder=BitmapDecoder.Create(stream,BitmapCreateOptions.DelayCreation,BitmapCacheOption.None);
+        int width=decoder.Frames[0].PixelWidth,height=decoder.Frames[0].PixelHeight;
+        if((long)width*height>100_000_000)throw new IOException("너무 큰 이미지입니다. 크기를 줄여 다시 시도해 주세요.");
+        return (width,height);
     }
     public static BitmapSource Resize(BitmapSource source,int percent) {
         if(percent==100)return source;var ratio=Math.Clamp(percent,10,100)/100d;

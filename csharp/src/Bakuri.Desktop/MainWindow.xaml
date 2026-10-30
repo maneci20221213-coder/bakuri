@@ -1,25 +1,161 @@
-<Window x:Class="Bakuri.Desktop.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="바꾸리 C# 시험판 0.16.0-exp.1" Width="900" Height="700" MinWidth="800" MinHeight="590" AllowDrop="True" Drop="FilesDropped" PreviewKeyDown="WindowKeyDown">
-<Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-<DockPanel Background="White" LastChildFill="False" IsEnabled="{Binding CanEdit}" Margin="12,10">
-<Button Content="파일 추가" Click="ChooseFiles"/><Button Content="이름순 정렬" Click="SortFiles"/><Button Content="선택 제거" Click="RemoveFiles"/>
-<StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="설정" Click="SettingsClick"/><Button Content="?" Click="HelpClick" Width="40"/></StackPanel></DockPanel>
-<TabControl x:Name="Tabs" Grid.Row="1" Height="37" SelectionChanged="ModeChanged" IsEnabled="{Binding CanEdit}"><TabItem Header="파일 변환"/><TabItem Header="파일명 변경"/></TabControl>
-<DataGrid x:Name="FileGrid" Grid.Row="2" ItemsSource="{Binding Files}" IsEnabled="{Binding CanEdit}" CellEditEnding="CellEdited" PreviewKeyDown="GridKeyDown" CanUserSortColumns="False">
-<DataGrid.Columns>
-<DataGridTemplateColumn Width="64"><DataGridTemplateColumn.Header><CheckBox Content="선택" Checked="CheckAll" Unchecked="CheckAll"/></DataGridTemplateColumn.Header><DataGridTemplateColumn.CellTemplate><DataTemplate><CheckBox IsChecked="{Binding Selected,UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
-<DataGridTextColumn MinWidth="150" Header="파일명" Binding="{Binding Name}" IsReadOnly="True" Width="*" ElementStyle="{StaticResource WrappedName}"/>
-<DataGridTextColumn x:Name="ExtraColumn" Header="추가할 문자열" Binding="{Binding Extra,UpdateSourceTrigger=LostFocus}" Width="180" Visibility="Collapsed"/>
-<DataGridTextColumn x:Name="NextColumn" MinWidth="150" Header="변경될 이름" Binding="{Binding NextName,UpdateSourceTrigger=LostFocus}" Width="*" ElementStyle="{StaticResource WrappedName}" Visibility="Collapsed"/>
-<DataGridTextColumn x:Name="SizeColumn" Header="용량" Binding="{Binding Size}" Width="110" IsReadOnly="True"/>
-<DataGridTextColumn x:Name="StateColumn" MaxWidth="260" MinWidth="85" Header="상태" Binding="{Binding State}" Width="SizeToCells" IsReadOnly="True" Visibility="Collapsed"/>
-</DataGrid.Columns><DataGrid.RowStyle><Style TargetType="DataGridRow"><Setter Property="ToolTip" Value="{Binding FullPath}"/></Style></DataGrid.RowStyle>
-</DataGrid>
-<Grid x:Name="ConversionOptions" Grid.Row="3" Margin="18,12" IsEnabled="{Binding CanEdit}"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="160"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="출력 형식" VerticalAlignment="Center" Margin="4"/><ComboBox x:Name="Format" Grid.Column="1" ItemsSource="{Binding Formats}" DisplayMemberPath="Label" SelectedIndex="0" SelectionChanged="FormatChanged"><ComboBox.ItemContainerStyle><Style TargetType="ComboBoxItem"><Setter Property="IsEnabled" Value="{Binding Enabled}"/></Style></ComboBox.ItemContainerStyle></ComboBox><StackPanel Orientation="Horizontal" Grid.Column="2"><TextBlock Text="이미지 크기" VerticalAlignment="Center" Margin="8"/><ComboBox x:Name="Ratio" Width="130" SelectionChanged="RatioChanged"><ComboBoxItem Content="픽셀 유지" Tag="100"/><ComboBoxItem Content="원본의 90%" Tag="90" IsSelected="True"/><ComboBoxItem Content="원본의 80%" Tag="80"/><ComboBoxItem Content="원본의 70%" Tag="70"/><ComboBoxItem Content="원본의 60%" Tag="60"/><ComboBoxItem Content="원본의 50%" Tag="50"/><ComboBoxItem Content="원본의 40%" Tag="40"/><ComboBoxItem Content="원본의 30%" Tag="30"/><ComboBoxItem Content="원본의 20%" Tag="20"/><ComboBoxItem Content="원본의 10%" Tag="10"/></ComboBox><CheckBox x:Name="Protect" Content="글자 보호"/></StackPanel><CheckBox Grid.Column="3" x:Name="Merge" Content="하나로 합치기"/></Grid>
-<Grid x:Name="RenameOptionsPanel" Grid.Row="3" Margin="20,12" Visibility="Collapsed" IsEnabled="{Binding CanEdit}"><Grid.ColumnDefinitions><ColumnDefinition Width="100"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-<TextBlock Text="찾아 바꾸기" VerticalAlignment="Center"/><Grid Grid.Column="1"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBox x:Name="Find" TextChanged="OptionsChanged"/><TextBlock Grid.Column="1" Text="→" VerticalAlignment="Center" HorizontalAlignment="Center"/><TextBox x:Name="Replace" Grid.Column="2" TextChanged="OptionsChanged"/></Grid>
-<TextBlock Grid.Row="1" Text="문자열 추가" VerticalAlignment="Center"/><Grid Grid.Row="1" Grid.Column="1"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="150"/><ColumnDefinition Width="130"/></Grid.ColumnDefinitions><TextBox x:Name="CommonText" TextChanged="OptionsChanged"/><CheckBox x:Name="PerFile" Content="파일별 문구" Grid.Column="1" Checked="OptionsChanged" Unchecked="OptionsChanged"/><ComboBox x:Name="TextPosition" Grid.Column="2" SelectedIndex="0" SelectionChanged="OptionsChanged"><ComboBoxItem Content="이름 앞"/><ComboBoxItem Content="이름 뒤"/><ComboBoxItem Content="특정 문자 앞"/><ComboBoxItem Content="특정 문자 뒤"/></ComboBox><TextBox x:Name="TextMarker" Grid.Column="3" ToolTip="처음 일치하는 기준 문자" TextChanged="OptionsChanged"/></Grid>
-<TextBlock Grid.Row="2" Text="이름 통일" VerticalAlignment="Center"/><TextBox x:Name="BaseName" Grid.Row="2" Grid.Column="1" TextChanged="BaseChanged"/>
-<CheckBox Grid.Row="3" x:Name="NumberEnabled" Content="연번 추가" Checked="OptionsChanged" Unchecked="OptionsChanged"/><StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal"><TextBlock Text="시작 번호" VerticalAlignment="Center"/><TextBox x:Name="Start" Text="1" Width="65" TextChanged="OptionsChanged"/><TextBlock Text="자릿수" VerticalAlignment="Center" Margin="8,0,0,0"/><TextBox x:Name="Digits" Text="1" Width="45" TextChanged="OptionsChanged"/><ComboBox x:Name="NumberPosition" Width="125" SelectedIndex="1" SelectionChanged="OptionsChanged"><ComboBoxItem Content="이름 앞"/><ComboBoxItem Content="이름 뒤"/><ComboBoxItem Content="특정 문자 앞"/><ComboBoxItem Content="특정 문자 뒤"/></ComboBox><TextBox x:Name="NumberMarker" Width="100" ToolTip="처음 일치하는 기준 문자" TextChanged="OptionsChanged"/><TextBlock Text="구분자" VerticalAlignment="Center"/><ComboBox x:Name="Separator" Width="105" SelectedIndex="0" SelectionChanged="OptionsChanged"><ComboBoxItem Content="밑줄 _" Tag="_"/><ComboBoxItem Content="하이픈 -" Tag="-"/><ComboBoxItem Content="공백" Tag=" "/><ComboBoxItem Content="마침표 ." Tag="."/><ComboBoxItem Content="없음" Tag=""/></ComboBox></StackPanel>
-</Grid>
-<Grid Grid.Row="4" Margin="18,6,18,14"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><ProgressBar Height="4" Maximum="100" Value="{Binding Progress}"/><DockPanel Grid.Row="1"><StackPanel Orientation="Horizontal" DockPanel.Dock="Right"><Button x:Name="UndoButton" Content="마지막 변경 되돌리기" Click="UndoClick" IsEnabled="{Binding CanEdit}" Visibility="Collapsed"/><Button x:Name="RunButton" Content="변환 시작 →" Background="#2E83F2" Foreground="White" Click="RunClick"/></StackPanel><TextBlock Text="{Binding Status}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="2,6"/></DockPanel></Grid>
-</Grid></Window>
+<?xml version="1.0" ?>
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="Bakuri.Desktop.MainWindow" Title="바꾸리 C# 시험판 0.16.0-exp.1" Width="900" Height="700" MinWidth="800" MinHeight="590" AllowDrop="True" Drop="FilesDropped" PreviewKeyDown="WindowKeyDown">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <DockPanel Background="White" LastChildFill="False" IsEnabled="{Binding CanEdit}" Margin="12,10">
+            <Button Content="파일 추가" Click="ChooseFiles"/>
+            <Button Content="이름순 정렬" Click="SortFiles"/>
+            <Button Content="선택 제거" Click="RemoveFiles"/>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Content="설정" Click="SettingsClick"/>
+                <Button Content="?" Click="HelpClick" Width="40"/>
+            </StackPanel>
+        </DockPanel>
+        <TabControl x:Name="Tabs" Grid.Row="1" Height="37" SelectionChanged="ModeChanged" IsEnabled="{Binding CanEdit}">
+            <TabItem Header="파일 변환"/>
+            <TabItem Header="파일명 변경"/>
+        </TabControl>
+        <DataGrid x:Name="FileGrid" Grid.Row="2" ItemsSource="{Binding Files}" IsEnabled="{Binding CanEdit}" CellEditEnding="CellEdited" PreviewKeyDown="GridKeyDown" CanUserSortColumns="False">
+            <DataGrid.Columns>
+                <DataGridTemplateColumn Width="64">
+                    <DataGridTemplateColumn.Header>
+                        <CheckBox Content="선택" Checked="CheckAll" Unchecked="CheckAll"/>
+                    </DataGridTemplateColumn.Header>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <CheckBox IsChecked="{Binding Selected,UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn MinWidth="150" Header="파일명" Binding="{Binding Name}" IsReadOnly="True" Width="*" ElementStyle="{StaticResource WrappedName}"/>
+                <DataGridTextColumn x:Name="ExtraColumn" Header="추가할 문자열" Binding="{Binding Extra,UpdateSourceTrigger=LostFocus}" Width="180" Visibility="Collapsed"/>
+                <DataGridTextColumn x:Name="NextColumn" MinWidth="150" Header="변경될 이름" Binding="{Binding NextName,UpdateSourceTrigger=LostFocus}" Width="*" ElementStyle="{StaticResource WrappedName}" Visibility="Collapsed"/>
+                <DataGridTextColumn x:Name="SizeColumn" Header="용량" Binding="{Binding Size}" Width="110" IsReadOnly="True"/>
+                <DataGridTextColumn x:Name="StateColumn" MaxWidth="260" MinWidth="85" Header="상태" Binding="{Binding State}" Width="SizeToCells" IsReadOnly="True" Visibility="Collapsed"/>
+            </DataGrid.Columns>
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Setter Property="ToolTip" Value="{Binding FullPath}"/>
+                </Style>
+            </DataGrid.RowStyle>
+        </DataGrid>
+        <Grid x:Name="ConversionOptions" Grid.Row="3" Margin="18,12" IsEnabled="{Binding CanEdit}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="160"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="출력 형식" VerticalAlignment="Center" Margin="4"/>
+            <ComboBox x:Name="Format" Grid.Column="1" ItemsSource="{Binding Formats}" DisplayMemberPath="Label" SelectedIndex="0" SelectionChanged="FormatChanged">
+                <ComboBox.ItemContainerStyle>
+                    <Style TargetType="ComboBoxItem">
+                        <Setter Property="IsEnabled" Value="{Binding Enabled}"/>
+                    </Style>
+                </ComboBox.ItemContainerStyle>
+            </ComboBox>
+            <StackPanel Orientation="Horizontal" Grid.Column="2">
+                <TextBlock Text="이미지 크기" VerticalAlignment="Center" Margin="8"/>
+                <ComboBox x:Name="Ratio" Width="130" SelectionChanged="RatioChanged">
+                    <ComboBoxItem Content="픽셀 유지" Tag="100"/>
+                    <ComboBoxItem Content="원본의 90%" Tag="90" IsSelected="True"/>
+                    <ComboBoxItem Content="원본의 80%" Tag="80"/>
+                    <ComboBoxItem Content="원본의 70%" Tag="70"/>
+                    <ComboBoxItem Content="원본의 60%" Tag="60"/>
+                    <ComboBoxItem Content="원본의 50%" Tag="50"/>
+                    <ComboBoxItem Content="원본의 40%" Tag="40"/>
+                    <ComboBoxItem Content="원본의 30%" Tag="30"/>
+                    <ComboBoxItem Content="원본의 20%" Tag="20"/>
+                    <ComboBoxItem Content="원본의 10%" Tag="10"/>
+                </ComboBox>
+                <CheckBox x:Name="Protect" Content="글자 보호"/>
+            </StackPanel>
+            <CheckBox Grid.Column="3" x:Name="Merge" Content="하나로 합치기"/>
+        </Grid>
+        <Grid x:Name="RenameOptionsPanel" Grid.Row="3" Margin="20,12" Visibility="Collapsed" IsEnabled="{Binding CanEdit}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="100"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <TextBlock Text="찾아 바꾸기" VerticalAlignment="Center"/>
+            <Grid Grid.Column="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="24"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="Find" TextChanged="OptionsChanged"/>
+                <TextBlock Grid.Column="1" Text="→" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                <TextBox x:Name="Replace" Grid.Column="2" TextChanged="OptionsChanged"/>
+            </Grid>
+            <TextBlock Grid.Row="1" Text="문자열 추가" VerticalAlignment="Center"/>
+            <Grid Grid.Row="1" Grid.Column="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="130"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="CommonText" TextChanged="OptionsChanged"/>
+                <CheckBox x:Name="PerFile" Content="파일별 문구" Grid.Column="1" Checked="OptionsChanged" Unchecked="OptionsChanged"/>
+                <ComboBox x:Name="TextPosition" Grid.Column="2" SelectedIndex="0" SelectionChanged="OptionsChanged">
+                    <ComboBoxItem Content="이름 앞"/>
+                    <ComboBoxItem Content="이름 뒤"/>
+                    <ComboBoxItem Content="특정 문자 앞"/>
+                    <ComboBoxItem Content="특정 문자 뒤"/>
+                </ComboBox>
+                <TextBox x:Name="TextMarker" Grid.Column="3" ToolTip="처음 일치하는 기준 문자" TextChanged="OptionsChanged"/>
+            </Grid>
+            <TextBlock Grid.Row="2" Text="이름 통일" VerticalAlignment="Center"/>
+            <TextBox x:Name="BaseName" Grid.Row="2" Grid.Column="1" TextChanged="BaseChanged"/>
+            <CheckBox Grid.Row="3" x:Name="NumberEnabled" Content="연번 추가" Checked="OptionsChanged" Unchecked="OptionsChanged"/>
+            <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal">
+                <TextBlock Text="시작 번호" VerticalAlignment="Center"/>
+                <TextBox x:Name="Start" Text="1" Width="65" TextChanged="OptionsChanged"/>
+                <TextBlock Text="자릿수" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                <TextBox x:Name="Digits" Text="1" Width="45" TextChanged="OptionsChanged"/>
+                <ComboBox x:Name="NumberPosition" Width="125" SelectedIndex="1" SelectionChanged="OptionsChanged">
+                    <ComboBoxItem Content="이름 앞"/>
+                    <ComboBoxItem Content="이름 뒤"/>
+                    <ComboBoxItem Content="특정 문자 앞"/>
+                    <ComboBoxItem Content="특정 문자 뒤"/>
+                </ComboBox>
+                <TextBox x:Name="NumberMarker" Width="100" ToolTip="처음 일치하는 기준 문자" TextChanged="OptionsChanged"/>
+                <TextBlock Text="구분자" VerticalAlignment="Center"/>
+                <ComboBox x:Name="Separator" Width="105" SelectedIndex="0" SelectionChanged="OptionsChanged">
+                    <ComboBoxItem Content="밑줄 _" Tag="_"/>
+                    <ComboBoxItem Content="하이픈 -" Tag="-"/>
+                    <ComboBoxItem Content="공백" Tag=" "/>
+                    <ComboBoxItem Content="마침표 ." Tag="."/>
+                    <ComboBoxItem Content="없음" Tag=""/>
+                </ComboBox>
+            </StackPanel>
+        </Grid>
+        <Grid Grid.Row="4" Margin="18,6,18,14">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <ProgressBar Height="4" Maximum="100" Value="{Binding Progress}"/>
+            <DockPanel Grid.Row="1">
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                    <Button x:Name="UndoButton" Content="마지막 변경 되돌리기" Click="UndoClick" IsEnabled="{Binding CanEdit}" Visibility="Collapsed"/>
+                    <Button x:Name="RunButton" Content="변환 시작 →" Background="#2E83F2" Foreground="White" Click="RunClick"/>
+                </StackPanel>
+                <TextBlock Text="{Binding Status}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="2,6"/>
+            </DockPanel>
+        </Grid>
+    </Grid>
+</Window>

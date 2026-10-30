@@ -41,11 +41,12 @@ class UpdatePrompt(QDialog):
 
 class UpdateController(QObject):
     checked=Signal(object);failed=Signal(str);downloaded=Signal(object)
-    def __init__(self,window,settings,manager_factory=None):
+    def __init__(self,window,settings,manager_factory=None,disabled=False):
         super().__init__(window);self.window=window;self.settings=settings;self.factory=manager_factory
-        self.checking=False;self.installing=False;self.offered=set();self.worker=None;self.last_check=None
+        self.disabled=disabled;self.checking=False;self.installing=False;self.offered=set();self.worker=None;self.last_check=None
         self.checked.connect(self.on_checked);self.failed.connect(self.on_failed);self.downloaded.connect(self.on_downloaded)
     def request(self,reason):
+        if self.disabled:return
         if reason not in {'direct','expanded','tray'} or self.checking or self.installing or self.window.busy:return
         now=time.monotonic()
         if self.last_check is not None and now-self.last_check<300:return

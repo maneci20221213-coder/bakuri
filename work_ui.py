@@ -30,23 +30,6 @@ class CompressionDialog(QDialog):
     def save(self):
         options=self.options();s=self.settings;s.setValue('compress_profile',options['profile']);s.setValue('compress_protect',options['protect_text']);s.setValue('compress_strip',options['strip_metadata']);s.setValue('compress_direct',self.remember.isChecked());s.sync();self.accept()
 
-class ProgressPopup(QWidget):
-    stop_requested=Signal()
-    def __init__(self):
-        super().__init__(None,Qt.Tool|Qt.FramelessWindowHint|Qt.WindowStaysOnTopHint|Qt.WindowDoesNotAcceptFocus)
-        self.setAttribute(Qt.WA_TranslucentBackground);self.setAttribute(Qt.WA_ShowWithoutActivating);self.setFixedSize(180,118)
-        self.setStyleSheet('ProgressPopup {background:transparent;} QLabel {background:transparent;color:#26354A;font-family:"Malgun Gothic","Noto Sans CJK KR",sans-serif;font-size:40px;font-weight:600;} QPushButton {background:rgba(255,255,255,240);color:#2E83F2;border:1px solid #2E83F2;border-radius:7px;padding:6px 14px;font-size:13px;} QPushButton:disabled {color:#718096;border-color:#CBD5E1;}')
-        layout=QVBoxLayout(self);layout.setContentsMargins(8,4,8,8);layout.setSpacing(4)
-        self.number=QLabel('0%');self.number.setAlignment(Qt.AlignCenter);layout.addWidget(self.number)
-        glow=QGraphicsDropShadowEffect(self.number);glow.setBlurRadius(18);glow.setOffset(0,0);glow.setColor(QColor(255,255,255,250));self.number.setGraphicsEffect(glow)
-        self.stop=QPushButton('작업 중지');self.stop.setFocusPolicy(Qt.NoFocus);self.stop.clicked.connect(self.stop_requested);layout.addWidget(self.stop,0,Qt.AlignCenter)
-    def present(self,center):
-        self.number.setText('0%');self.stop.setText('작업 중지');self.stop.setEnabled(True)
-        screen=QApplication.screenAt(center) or QApplication.primaryScreen();rect=screen.availableGeometry()
-        self.move(max(rect.left(),min(center.x()-self.width()//2,rect.right()-self.width()+1)),max(rect.top(),min(center.y()-self.height()//2,rect.bottom()-self.height()+1)));self.show()
-    def update_percent(self,percent):self.number.setText(f'{max(0,min(100,int(percent)))}%')
-    def stopping(self):self.stop.setText('중지 요청 중');self.stop.setEnabled(False)
-
 def size_text(value):return f'{value/1_000_000:.2f} MB' if value>=1_000_000 else f'{value/1000:.1f} KB'
 
 class CompressionResults(QDialog):

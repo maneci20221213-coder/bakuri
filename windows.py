@@ -2,6 +2,7 @@
 import sys, threading, ctypes, subprocess, winreg, queue, time, logging, os
 from user_messages import friendly_error
 from pathlib import Path
+from build_channel import DEFAULT_HOTKEY
 RUN=r'Software\Microsoft\Windows\CurrentVersion\Run'
 NAME='Bakuri'
 KEYS={'` (백틱)':(0xC0,()),'F8':(0x77,()),'F9':(0x78,()),'Ctrl+Alt+B':(0x42,(0x11,0x12))}
@@ -37,7 +38,7 @@ class SelectionWatcher(threading.Thread):
             handler=RotatingFileHandler(folder/'hotkey.log',maxBytes=262144,backupCount=1,encoding='utf-8');handler.setFormatter(logging.Formatter('%(asctime)s %(message)s'));self.log.addHandler(handler)
     def update_settings(self,settings):
         self.enabled=settings.value('hotkey_enabled',True,type=bool)
-        self.binding=KEYS.get(settings.value('hotkey','` (백틱)'),KEYS['` (백틱)'])
+        self.binding=KEYS.get(settings.value('hotkey',DEFAULT_HOTKEY),KEYS['` (백틱)'])
     def on_press(self,key):
         import win32gui,win32process
         vk=getattr(key,'vk',None) or getattr(getattr(key,'value',None),'vk',None)

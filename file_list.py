@@ -1,30 +1,62 @@
 """Ordered, checked input files with batched duplicate lookup."""
 import os,re
 from pathlib import Path
-from PySide6.QtCore import Qt,Signal,QSize
+from PySide6.QtCore import Qt,Signal,QSize,QTimer,QEvent
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import (QTreeWidget,QTreeWidgetItem,QHeaderView,QAbstractItemView,QLabel,QCheckBox,QMenu)
+from PySide6.QtWidgets import (QApplication,QTreeWidget,QTreeWidgetItem,QHeaderView,QAbstractItemView,QLabel,QCheckBox,QMenu)
 from engine import SUPPORTED,SPREADSHEETS,IMAGES
 from theme import icon,stylesheet
+from file_names import FileNameDelegate
 
 def natural_key(text):
     return tuple((1,int(p)) if p.isdigit() else (0,p.casefold()) for p in re.split(r'(\d+)',text))
 
 class Files(QTreeWidget):
-    changed=Signal()
-    def __init__(self):
-        super().__init__(); self.setColumnCount(4); self.setHeaderLabels(['','미리보기','파일명','용량'])
+    changed=Signal();paste_requested=Signal()
+    def __init__(self,allow_all=False):
+        super().__init__();self.allow_all=allow_all; self.setColumnCount(4); self.setHeaderLabels(['','미리보기','파일명','용량'])
         self.setRootIsDecorated(False); self.setAlternatingRowColors(False); self.setStyleSheet(stylesheet())
-        self.setUniformRowHeights(True); self.setIndentation(0)
+        self.setUniformRowHeights(False); self.setIndentation(0); self.setItemDelegate(FileNameDelegate(self))
 
-        self.setColumnWidth(0,84); self.setColumnWidth(1,100); self.setColumnWidth(3,115); self.header().setSectionResizeMode(2,QHeaderView.Stretch)
+        self.header().setStretchLastSection(False); self.header().setSectionResizeMode(QHeaderView.Interactive)
+        self.setColumnWidth(0,84); self.setColumnWidth(1,100); self.setColumnWidth(2,420); self.setColumnWidth(3,115)
         self.setIconSize(QSize(34,38)); self.setAcceptDrops(True); self.setDragDropMode(QAbstractItemView.InternalMove)
         self.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.setContextMenuPolicy(Qt.CustomContextMenu); self.customContextMenuRequested.connect(self.context_menu)
         self.selection_caption=QLabel('선택',self.header().viewport()); self.selection_caption.setObjectName('selectionCaption'); self.selection_caption.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.master=QCheckBox(self.header().viewport()); self.master.setTristate(True); self.master.setToolTip('전체 선택 / 해제'); self.master.setAccessibleName('전체 선택')
         self.master.clicked.connect(lambda:self.check_all(Qt.Checked if self.master.checkState()!=Qt.Unchecked else Qt.Unchecked))
-        self.header().sectionResized.connect(self.place_master); self.header().geometriesChanged.connect(self.place_master); self.header().sectionMoved.connect(self.place_master); self.itemChanged.connect(lambda *_:self.sync_master()); self.place_master()
+        self.header().sectionResized.connect(self.place_master); self.header().geometriesChanged.connect(self.place_master); self.header().sectionMoved.connect(self.place_master); self.itemChanged.connect(lambda item,column:self.sync_master() if column==0 else None); self.place_master()
+        self.manual_sizing=False;self.header().viewport().installEventFilter(self)
+        self.fit_timer=QTimer(self);self.fit_timer.setSingleShot(True);self.fit_timer.timeout.connect(self.fit_name_columns)
+        self.reflow_timer=QTimer(self);self.reflow_timer.setSingleShot(True);self.reflow_timer.timeout.connect(self.reflow_names)
+        self.changed.connect(self.request_name_fit);self.header().sectionResized.connect(self.name_column_resized)
+    def name_column_resized(self,column,*_):
+        self.reflow_timer.start(0)
+        if column==5:self.request_name_fit()
+    def resizeEvent(self,event):
+        super().resizeEvent(event)
+        if hasattr(self,'fit_timer'):self.request_name_fit()
+    def eventFilter(self,obj,event):
+        if obj is self.header().viewport():
+            if event.type()==QEvent.MouseButtonPress:self.manual_sizing=True;self.fit_timer.stop()
+            elif event.type()==QEvent.MouseButtonRelease:self.manual_sizing=False
+        return super().eventFilter(obj,event)
+    def request_name_fit(self):
+        if not self.manual_sizing:self.fit_timer.start(0)
+    def reflow_names(self):self.scheduleDelayedItemsLayout();self.viewport().update()
+    def fit_name_columns(self):
+        columns=[c for c in (2,4) if c<self.columnCount() and not self.isColumnHidden(c)]
+        if not columns:return
+        other=sum(self.columnWidth(c) for c in range(self.columnCount()) if c not in columns and not self.isColumnHidden(c))
+        budget=max(1,self.viewport().width()-other-2);metrics=self.fontMetrics()
+        desired=[max(160,max((metrics.horizontalAdvance(self.item(i).text(c))+24 for i in range(self.count())),default=0)) for c in columns]
+        if sum(desired)>budget:
+            minimum=min(160,budget//len(columns));extra=max(0,budget-minimum*len(columns));weights=[max(1,d-minimum) for d in desired]
+            widths=[minimum+int(extra*w/sum(weights)) for w in weights];widths[-1]+=budget-sum(widths)
+        else:widths=desired
+        for column,width in zip(columns,widths):self.setColumnWidth(column,width)
+        self.reflow_names()
     def delete_selected(self):
         if not self.isEnabled(): return
         for item in self.selectedItems(): self.takeTopLevelItem(self.indexOfTopLevelItem(item))
@@ -34,9 +66,12 @@ class Files(QTreeWidget):
         else: super().keyPressEvent(event)
     def context_menu(self,point):
         item=self.itemAt(point)
-        if item is None: return
-        if not item.isSelected(): self.clearSelection(); item.setSelected(True)
-        menu=QMenu(self); menu.addAction('목록에서 삭제',self.delete_selected); menu.exec(self.viewport().mapToGlobal(point))
+        menu=QMenu(self);paste=menu.addAction('파일 붙여넣기 (Ctrl+V)',self.paste_requested.emit)
+        mime=QApplication.clipboard().mimeData();paste.setEnabled(bool(mime and any(u.isLocalFile() for u in mime.urls())) and self.isEnabled())
+        if item is not None:
+            if not item.isSelected():self.clearSelection();item.setSelected(True)
+            menu.addSeparator();menu.addAction('목록에서 삭제',self.delete_selected)
+        menu.exec(self.viewport().mapToGlobal(point))
     def place_master(self,*_):
         x=self.header().sectionViewportPosition(0);h=max(36,self.header().height())
         self.master.setGeometry(x+8,(h-24)//2,20,24); self.selection_caption.setGeometry(x+34,0,39,h)
@@ -65,9 +100,9 @@ class Files(QTreeWidget):
     def add_paths(self,paths):
         existing={os.path.normcase(self.item(i).data(0,Qt.UserRole)) for i in range(self.count())}
         for p in paths:
-            path=Path(p).resolve()
+            path=Path(p).absolute() if self.allow_all else Path(p).resolve()
             key=os.path.normcase(str(path))
-            if path.is_file() and path.suffix.lower() in SUPPORTED and key not in existing:
+            if path.is_file() and (self.allow_all or path.suffix.lower() in SUPPORTED) and key not in existing:
                 existing.add(key)
                 size=path.stat().st_size; label=f'{size/1048576:.1f} MB' if size>=1048576 else f'{size/1024:.1f} KB'
                 item=QTreeWidgetItem(['','',path.name,label]); item.setData(0,Qt.UserRole,str(path)); item.setToolTip(2,str(path))

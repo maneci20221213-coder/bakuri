@@ -18,6 +18,7 @@ from bakuri.domain.formats import SUPPORTED, SPREADSHEETS, IMAGES
 from theme import icon, stylesheet
 from file_names import FileNameDelegate
 from bakuri.domain.models import InputFile
+from bakuri.ui.file_reorder import FileReorder
 
 
 def natural_key(text):
@@ -51,6 +52,9 @@ class Files(QTreeWidget):
         self.setIconSize(QSize(34, 38))
         self.setAcceptDrops(True)
         self.setDragDropMode(QAbstractItemView.InternalMove)
+        self.setAutoScroll(False)
+        self.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self.setDropIndicatorShown(False)
         self.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.context_menu)
@@ -81,6 +85,7 @@ class Files(QTreeWidget):
         self.reflow_timer.timeout.connect(self.reflow_names)
         self.changed.connect(self.request_name_fit)
         self.header().sectionResized.connect(self.name_column_resized)
+        self.reorder = FileReorder(self)
 
     def name_column_resized(self, column, *_):
         self.reflow_timer.start(0)
@@ -102,7 +107,7 @@ class Files(QTreeWidget):
         return super().eventFilter(obj, event)
 
     def request_name_fit(self):
-        if not self.manual_sizing:
+        if not self.manual_sizing and not self.reorder.active:
             self.fit_timer.start(0)
 
     def reflow_names(self):
@@ -204,30 +209,43 @@ class Files(QTreeWidget):
         super().clear()
         self.sync_master()
 
+    def startDrag(self, supported_actions):
+        if self.isEnabled():
+            self.reorder.start()
+
     def dragEnterEvent(self, e):
-        if e.mimeData().hasUrls():
+        if self.reorder.accepts(e):
+            e.setDropAction(Qt.MoveAction)
+            e.accept()
+        elif e.mimeData().hasUrls():
             e.acceptProposedAction()
         else:
-            super().dragEnterEvent(e)
+            e.ignore()
 
     def dragMoveEvent(self, e):
-        if e.mimeData().hasUrls():
+        if self.reorder.accepts(e):
+            self.reorder.update_at(e.position().toPoint())
+            e.setDropAction(Qt.MoveAction)
+            e.accept()
+        elif e.mimeData().hasUrls():
             e.acceptProposedAction()
         else:
-            super().dragMoveEvent(e)
+            e.ignore()
+
+    def dragLeaveEvent(self, e):
+        # Our own timer remains active outside the viewport; finish handles cancel.
+        e.accept()
 
     def dropEvent(self, e):
-        if e.mimeData().hasUrls():
+        if self.reorder.accepts(e):
+            self.reorder.drop(e.position().toPoint())
+            e.setDropAction(Qt.MoveAction)
+            e.accept()
+        elif e.mimeData().hasUrls():
             self.add_paths([u.toLocalFile() for u in e.mimeData().urls()])
             e.acceptProposedAction()
         else:
-            index = self.indexAt(e.position().toPoint())
-            # Tree rows must stay flat: only between-row drops are allowed.
-            if self.dropIndicatorPosition() == QAbstractItemView.OnItem:
-                e.ignore()
-                return
-            super().dropEvent(e)
-        self.sync_master()
+            e.ignore()
 
     def add_paths(self, paths):
         existing = {

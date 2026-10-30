@@ -45,6 +45,8 @@ ROUTES = {
         "bakuri/ui/main_view.py",
         "bakuri/ui/main_window.py",
         "file_list.py",
+        "bakuri/ui/file_reorder.py",
+        "test_file_reorder.py",
         "file_names.py",
         "test_ui.py",
         "test_development6.py",

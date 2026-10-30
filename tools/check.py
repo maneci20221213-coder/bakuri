@@ -26,6 +26,7 @@ GROUPS = {
         "test_user_help",
         "test_refactor",
         "test_completion_ui",
+        "test_file_reorder",
     ],
     "popup": ["test_hotkey", "test_popup_motion", "test_ui"],
     "update": ["test_updater", "test_update_source"],

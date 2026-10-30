@@ -40,12 +40,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native popup verification failed' }
           python verify_completion_ui.py
           if ($LASTEXITCODE -ne 0) { throw 'Native completion/layout verification failed' }
+          python verify_reorder.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native file drag verification failed' }
       - name: Build portable developer edition
         shell: pwsh
         run: ./build_dev.ps1
       - uses: actions/upload-artifact@v4
         with:
-          name: Bakuri-Development-0.15.0-dev.11
+          name: Bakuri-Development-0.15.0-dev.12
           path: DevArtifacts/*
           if-no-files-found: error
           retention-days: 30

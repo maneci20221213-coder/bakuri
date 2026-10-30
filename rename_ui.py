@@ -148,6 +148,9 @@ class RenamePanel(QWidget):
         form.addRow(self.number_enabled, line)
         self.message = QLabel()
         self.message.setWordWrap(True)
+        self.message.setToolTip(
+            "목록: 추가한 전체 파일 · 변경 예정: 체크한 파일 중 이름이 달라지는 파일 · 오류: 체크한 파일의 미리보기 오류"
+        )
         layout.addWidget(self.message)
         line = QHBoxLayout()
         line.setSpacing(8)
@@ -333,7 +336,7 @@ class RenamePanel(QWidget):
             pass
         self.restore.setEnabled(state == "complete" and not self.window.busy)
         self.message.setText(
-            f"{count}개 변경 예정 · 오류 {errors}개"
+            f"목록 {self.files.count()}개 / 변경 예정 {count}개 / 오류 {errors}개"
             + (
                 " · 미완료 기록을 먼저 확인해 주세요."
                 if state in {"working", "recovery_needed"}
@@ -371,7 +374,6 @@ class RenamePanel(QWidget):
             entries = apply(self.rows, self.journal)
             self.update_paths(entries)
             summary = f"{len(entries)}개 이름 변경 완료 · 실행 취소 가능"
-            self.message.setText(summary)
             if entries:
                 self.window.show_completion(
                     summary, [str(Path(e["current"]).parent) for e in entries]
@@ -387,7 +389,6 @@ class RenamePanel(QWidget):
             entries = undo(self.journal)
             self.update_paths(entries)
             summary = f"{len(entries)}개 원래 이름으로 복원했습니다."
-            self.message.setText(summary)
             self.window.show_completion(summary, [str(Path(e["current"]).parent) for e in entries])
         except Exception as exc:
             QMessageBox.warning(self, "되돌리기 안내", str(exc))

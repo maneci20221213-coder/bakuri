@@ -126,3 +126,30 @@ class CompletionUiTests(unittest.TestCase):
         self.assertNotIn("개발용", dialog.notes.toPlainText())
         self.assertNotIn("dev.", dialog.notes.toPlainText())
         dialog.reject()
+
+    def test_rename_counts_distinguish_entire_list_changes_and_errors(self):
+        w = self.window
+        panel = w.rename_panel
+        panel.journal = Path(self.temp.name) / "rename.json"
+        w.mode_tabs.setCurrentIndex(1)
+        paths = [Path(self.temp.name) / name for name in ("a.pdf", "b.pdf")]
+        for path in paths:
+            path.write_bytes(b"original")
+        w.files.add_paths(list(map(str, paths)))
+        self.assertEqual(panel.message.text(), "목록 2개 / 변경 예정 0개 / 오류 0개")
+        panel.string.setText("새_")
+        self.assertEqual(panel.message.text(), "목록 2개 / 변경 예정 2개 / 오류 0개")
+        w.files.item(0).setCheckState(0, Qt.Unchecked)
+        self.assertEqual(panel.message.text(), "목록 2개 / 변경 예정 1개 / 오류 0개")
+        w.files.item(0).setCheckState(0, Qt.Checked)
+        for i in range(2):
+            w.files.item(i).setText(4, "중복.pdf")
+        self.assertEqual(panel.message.text(), "목록 2개 / 변경 예정 2개 / 오류 2개")
+        w.files.item(0).setCheckState(0, Qt.Unchecked)
+        self.assertEqual(panel.message.text(), "목록 2개 / 변경 예정 1개 / 오류 0개")
+        panel.execute()
+        self.assertTrue(panel.message.text().startswith("목록 2개 / 변경 예정"))
+        panel.undo()
+        self.assertTrue(panel.message.text().startswith("목록 2개 / 변경 예정"))
+        w.files.clear()
+        self.assertEqual(panel.message.text(), "목록 0개 / 변경 예정 0개 / 오류 0개")

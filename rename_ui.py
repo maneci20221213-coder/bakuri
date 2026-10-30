@@ -34,7 +34,7 @@ from bakuri.domain.models import RenameOptions
 
 class TextDelegate(FileNameDelegate):
     def paint(self, painter, option, index):
-        if option.state & QStyle.State_Editing:
+        if self.parent().indexWidget(index) is not None:
             opt = QStyleOptionViewItem(option)
             self.initStyleOption(opt, index)
             opt.text = ""

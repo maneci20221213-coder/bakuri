@@ -250,6 +250,12 @@ class CompletionUiTests(unittest.TestCase):
             editor = APP.focusWidget()
             self.assertIsInstance(editor, QLineEdit)
             self.assertIn("background:#FFFFFF", editor.styleSheet())
+            with patch("file_names.FileNameDelegate.paint", autospec=True) as underlying:
+                files.viewport().repaint()
+                APP.processEvents()
+                self.assertNotIn(
+                    column, [call.args[3].column() for call in underlying.call_args_list]
+                )
             editor.setText("edited")
             QTest.keyClick(editor, Qt.Key_Return)
             APP.processEvents()

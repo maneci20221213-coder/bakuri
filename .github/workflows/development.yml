@@ -40,7 +40,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native popup verification failed' }
           python verify_completion_ui.py
           if ($LASTEXITCODE -ne 0) { throw 'Native completion/layout verification failed' }
-          python verify_reorder.py
+          python -c "import subprocess,sys; subprocess.run([sys.executable,'verify_reorder.py'],check=True,timeout=25)"
           if ($LASTEXITCODE -ne 0) { throw 'Native file drag verification failed' }
       - name: Build portable developer edition
         shell: pwsh

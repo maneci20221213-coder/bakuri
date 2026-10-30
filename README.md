@@ -2,9 +2,9 @@
 
 이미지와 문서를 원하는 형식으로 바꾸고, 여러 파일을 하나로 합치거나 용량을 줄이고, 파일 이름을 한꺼번에 바꾸는 Windows용 프로그램입니다.
 
-[**1.0 베타 1 설치 파일 다운로드**](https://github.com/maneci20221213-coder/bakuri/releases/download/v1.0.0-beta.1/BakuriSetup.exe) · [일반 배포판](https://github.com/maneci20221213-coder/bakuri/releases/latest) · [파일 변환 설명](USER-GUIDE.md) · [파일명 변경 설명](RENAME-GUIDE.md)
+[**1.0 베타 1 설치 파일 다운로드**](https://github.com/maneci20221213-coder/bakuri/releases/download/v1.0.0/BakuriSetup.exe) · [일반 배포판](https://github.com/maneci20221213-coder/bakuri/releases/latest) · [파일 변환 설명](USER-GUIDE.md) · [파일명 변경 설명](RENAME-GUIDE.md)
 
-현재 버전은 **1.0.0-beta.1**입니다. 베타는 직접 설치해 사용할 수 있으며 기존 일반판의 자동 업데이트로 배포하지 않습니다.
+현재 버전은 **1.0 베타 1**입니다. 기존 배포판에서도 업데이트 안내를 받을 수 있습니다. 업데이트용 버전 번호는 **1.0.0**입니다.
 
 ## 설치와 시작
 

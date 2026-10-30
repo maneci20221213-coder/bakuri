@@ -4,7 +4,6 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices, QCursor
 from PySide6.QtWidgets import (
-    QSystemTrayIcon,
     QDialog,
     QVBoxLayout,
     QLabel,
@@ -16,11 +15,16 @@ from PySide6.QtWidgets import (
 from work_ui import CompressionResults
 from user_messages import friendly_error
 from bakuri.domain.models import JobReport
+from .completion_toast import CompletionToast
 
 
 class ResultsPresenter:
     def __init__(self, window):
         self.window = window
+        self.toast = CompletionToast(
+            self.show_last_result, lambda: self.open_folders(window.notification_folders)
+        )
+        window.destroyed.connect(self.toast.deleteLater)
 
     def show_completion(self, summary, folders, rows=None, warning=False):
         window = self.window
@@ -30,11 +34,9 @@ class ResultsPresenter:
         window.tray_result_action.setEnabled(True)
         window.tray.setToolTip(("바꾸리 · " + summary)[:127])
         if window.settings.value("notify", True, type=bool):
-            window.tray.showMessage(
-                "바꾸리 작업 결과",
-                summary + "\n클릭하면 결과를 확인합니다.",
-                QSystemTrayIcon.Warning if warning else QSystemTrayIcon.Information,
-            )
+            self.toast.present(summary, bool(folders), warning, window.tray.geometry())
+        else:
+            self.toast.hide()
 
     def show_last_result(self):
         window = self.window

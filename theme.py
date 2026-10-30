@@ -47,10 +47,10 @@ def stylesheet():
     QComboBox::down-arrow {{ image:url("{arrow}"); width:12px; height:12px; }}
     QComboBox QAbstractItemView {{ background:white; selection-background-color:#E9F2FF; selection-color:#1E4C83; border:1px solid #DCE3EE; padding:4px; }}
     QComboBox QAbstractItemView::item:disabled {{ color:#A4AFBD; background:#F2F5F9; }}
-    QTreeWidget {{ background:#FFFFFF; border:0; outline:0; show-decoration-selected:1; }}
+    QTreeWidget {{ selection-color:#26354A; background:#FFFFFF; border:0; outline:0; show-decoration-selected:1; }}
     QTreeWidget::item {{ border-bottom:1px solid #EDF1F6; padding:6px 8px; color:#26354A; }}
     QTreeWidget::item:hover {{ background:#F6F9FF; }}
-    QTreeWidget::item:selected {{ background:#EAF3FF; color:#193C68; }}
+    QTreeWidget::item:selected {{ background:#EAF3FF; color:#26354A; }}
     QTreeWidget::indicator, QCheckBox::indicator {{ width:18px; height:18px; border:1px solid #A7B4C5; border-radius:4px; background:white; }}
     QTreeWidget::indicator:checked, QCheckBox::indicator:checked {{ background:{ACCENT}; border-color:{ACCENT}; image:url("{check}"); }}
     QCheckBox::indicator:indeterminate {{ background:{ACCENT}; border-color:{ACCENT}; image:url("{minus}"); }}

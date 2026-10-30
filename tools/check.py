@@ -20,7 +20,13 @@ GROUPS = {
     ],
     "compress": ["test_compression", "test_ratios"],
     "rename": ["test_rename", "test_development2", "test_development4", "test_fill_down"],
-    "window": ["test_ui", "test_development6", "test_user_help", "test_refactor"],
+    "window": [
+        "test_ui",
+        "test_development6",
+        "test_user_help",
+        "test_refactor",
+        "test_completion_ui",
+    ],
     "popup": ["test_hotkey", "test_popup_motion", "test_ui"],
     "update": ["test_updater", "test_update_source"],
 }

@@ -60,21 +60,21 @@ class DevelopmentUiTests(unittest.TestCase):
  def test_only_completion_toast_and_tray_progress_stop(self):
   w=self.w;w.settings.setValue('notify',True);entered=threading.Event();release=threading.Event()
   def operation(control):control.update(37,'진행 중');entered.set();release.wait(3);control.check()
-  with patch.object(w.tray,'showMessage') as notify:
+  with patch.object(w.results.toast,'present') as notify:
    try:
     w.begin_job(operation,'convert');self.assertTrue(entered.wait(1));APP.processEvents();self.assertIn('37%',w.tray.toolTip());notify.assert_not_called()
     self.assertTrue(w.tray_stop_action.isEnabled());w.tray_stop_action.trigger();self.assertIn('중지 요청',w.tray.toolTip());self.assertFalse(w.tray_stop_action.isEnabled())
    finally:release.set()
    deadline=time.monotonic()+3
    while w.busy and time.monotonic()<deadline:QTest.qWait(10)
-   self.assertFalse(w.busy);notify.assert_called_once();self.assertIn('작업 중지',notify.call_args.args[1]);self.assertTrue(w.tray_result_action.isEnabled())
+   self.assertFalse(w.busy);notify.assert_called_once();self.assertIn('작업 중지',notify.call_args.args[0]);self.assertTrue(w.tray_result_action.isEnabled())
   w.settings.setValue('notify',False)
  def test_completion_summary_savings_and_last_result_without_alert(self):
   rows=[dict(source='a.pdf',output='out.pdf',before=10_000_000,after=4_000_000,status='저장 완료',detail=''),dict(source='b.pdf',output='',before=90_000_000,after=90_000_000,status='실패',detail='')]
   w=self.w;w.settings.setValue('notify',True)
-  with patch.object(w.tray,'showMessage') as notify,patch('bakuri.ui.main_window.QMessageBox.warning') as warning:
+  with patch.object(w.results.toast,'present') as notify,patch('bakuri.ui.main_window.QMessageBox.warning') as warning:
    w.finished(dict(paths=['out.pdf'],rows=rows,kind='compress',outcome='done',error=''))
-   text=notify.call_args.args[1];self.assertIn('10.00 MB → 4.00 MB',text);self.assertIn('6.00 MB 절감(60.0%)',text);self.assertIn('실패 1개',text);warning.assert_not_called()
+   text=notify.call_args.args[0];self.assertIn('10.00 MB → 4.00 MB',text);self.assertIn('6.00 MB 절감(60.0%)',text);self.assertIn('실패 1개',text);warning.assert_not_called()
    self.assertEqual(w.last_result['rows'],rows);self.assertTrue(w.tray_result_action.isEnabled())
   w.settings.setValue('notify',False)
 

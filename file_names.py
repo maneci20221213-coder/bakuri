@@ -26,7 +26,7 @@ class FileNameDelegate(QStyledItemDelegate):
         lines=name_lines(opt.text,opt.font.toString(),rect.width());opt.text='';style.drawControl(QStyle.CE_ItemViewItem,opt,painter,opt.widget)
         height=opt.fontMetrics.height();y=rect.top()+max(0,(rect.height()-height*len(lines))//2)
         painter.save();painter.setClipRect(rect);painter.setFont(opt.font)
-        painter.setPen(opt.palette.color(QPalette.HighlightedText if opt.state&QStyle.State_Selected else QPalette.Text))
+        painter.setPen(opt.palette.color(QPalette.Text))
         for line in lines:painter.drawText(QRect(rect.left(),y,rect.width(),height),Qt.AlignLeft|Qt.AlignVCenter,line);y+=height
         painter.restore()
     def sizeHint(self,option,index):

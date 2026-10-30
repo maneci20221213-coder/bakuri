@@ -61,6 +61,7 @@ ROUTES = {
         "bakuri/application/runner.py",
         "bakuri/application/control.py",
         "bakuri/ui/results.py",
+        "bakuri/ui/completion_toast.py",
         "test_application.py",
     ),
     "settings": (

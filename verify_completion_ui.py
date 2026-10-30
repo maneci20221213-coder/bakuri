@@ -7,7 +7,7 @@ os.environ["BAKURI_DISABLE_SHELL_INTEGRATION"] = "1"
 from pathlib import Path
 import tempfile
 import win32gui
-from PySide6.QtCore import QSettings, QPoint
+from PySide6.QtCore import QSettings, QPoint, Qt
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QFormLayout
 from PySide6.QtTest import QTest
@@ -44,6 +44,11 @@ with tempfile.TemporaryDirectory() as directory:
         palette.setColor(QPalette.HighlightedText, QColor("white"))
         window.files.setPalette(palette)
         panel = window.rename_panel
+        assert panel.start.alignment() == Qt.AlignCenter
+        assert panel.digits.alignment() == Qt.AlignCenter
+        for control in [panel.start, panel.digits, panel.separator]:
+            caption = control.parentWidget().layout().itemAt(0).widget()
+            assert 0 < control.geometry().left() - caption.geometry().right() <= 8
         assert panel.message.palette().color(QPalette.WindowText).name() == "#718096"
         assert abs(panel.message.geometry().center().y() - panel.run.geometry().center().y()) <= 1
         assert panel.grab().toImage().pixelColor(QPoint(5, 5)).name() == "#ffffff"

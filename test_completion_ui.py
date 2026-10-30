@@ -204,3 +204,24 @@ class CompletionUiTests(unittest.TestCase):
         image = p.grab().toImage()
         self.assertEqual(image.pixelColor(QPoint(5, 5)).name(), "#ffffff")
         self.assertNotIn("목록", p.message.text())
+
+    def test_number_parameters_keep_caption_close_and_numbers_centered(self):
+        w = self.window
+        w.show()
+        w.mode_tabs.setCurrentIndex(1)
+        p = w.rename_panel
+        for width in (1100, 1250):
+            w.resize(width, w.height())
+            QTest.qWait(20)
+            self.assertEqual(p.start.alignment(), Qt.AlignCenter)
+            self.assertEqual(p.digits.alignment(), Qt.AlignCenter)
+            for control, name in [
+                (p.start, "시작 번호"),
+                (p.digits, "자릿수"),
+                (p.separator, "구분자"),
+            ]:
+                caption = control.parentWidget().layout().itemAt(0).widget()
+                self.assertEqual(caption.text(), name)
+                gap = control.geometry().left() - caption.geometry().right()
+                self.assertGreater(gap, 0)
+                self.assertLessEqual(gap, 8)

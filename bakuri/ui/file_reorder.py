@@ -12,7 +12,7 @@ class FileReorder:
         self.active = False
         self.committed = False
         self.original = []
-        self.moving = []
+        self.moving = ()
         self.original_scroll = 0
         self.gap = QLabel(view.viewport())
         self.gap.setAlignment(Qt.AlignCenter)
@@ -25,12 +25,17 @@ class FileReorder:
         self.timer.setInterval(30)
         self.timer.timeout.connect(self.tick)
 
-    def begin(self):
+    def begin(self, selection=None):
         if self.active:
             return False
         view = self.view
         self.original = [view.item(i) for i in range(view.count())]
-        self.moving = [item for item in self.original if item.isSelected()]
+        selected_ids = None if selection is None else {id(item) for item in selection}
+        self.moving = tuple(
+            item
+            for item in self.original
+            if (item.isSelected() if selected_ids is None else id(item) in selected_ids)
+        )
         if not self.moving:
             return False
         self.original_scroll = view.verticalScrollBar().value()
@@ -58,7 +63,7 @@ class FileReorder:
         moving_ids = {id(item) for item in self.moving}
         remaining = [item for item in current if id(item) not in moving_ids]
         insertion = sum(id(item) not in moving_ids for item in current[:slot])
-        desired = remaining[:insertion] + self.moving + remaining[insertion:]
+        desired = remaining[:insertion] + list(self.moving) + remaining[insertion:]
         if [id(item) for item in desired] != [id(item) for item in current]:
             scroll = view.verticalScrollBar().value()
             blocked = view.blockSignals(True)
@@ -152,4 +157,4 @@ class FileReorder:
 
             QTimer.singleShot(0, reveal)
         self.original = []
-        self.moving = []
+        self.moving = ()

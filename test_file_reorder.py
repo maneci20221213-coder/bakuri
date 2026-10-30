@@ -229,3 +229,99 @@ class ReorderTests(unittest.TestCase):
         QTest.mouseClick(self.view.viewport(), Qt.LeftButton, Qt.NoModifier, point)
         self.assertEqual(self.view.selectedItems(), [self.original[1]])
         self.assertFalse(self.view.reorder.active)
+
+    def test_four_file_drag_snapshot_survives_jitter_modifiers_and_each_start_row(self):
+        for start in range(4):
+            for modifier in (Qt.NoModifier, Qt.ControlModifier, Qt.ShiftModifier):
+                with self.subTest(start=start, modifier=modifier):
+                    self.view.finish_reorder(False)
+                    self.view.clearSelection()
+                    while self.view.count():
+                        self.view.takeTopLevelItem(0)
+                    self.view.addTopLevelItems(self.original)
+                    self.view.verticalScrollBar().setValue(0)
+                    self.view.setCurrentItem(self.original[0], 2)
+                    for item in self.original[:4]:
+                        item.setSelected(True)
+                    self.view.doItemsLayout()
+                    source = self.view.visualItemRect(self.original[start]).center()
+                    source.setX(250)
+                    QTest.mousePress(self.view.viewport(), Qt.LeftButton, modifier, source)
+                    for offset in (QPoint(1, 0), QPoint(3, 1), QPoint(5, 1)):
+                        point = source + offset
+                        move = QMouseEvent(
+                            QEvent.MouseMove,
+                            QPointF(point),
+                            QPointF(self.view.viewport().mapToGlobal(point)),
+                            Qt.NoButton,
+                            Qt.LeftButton,
+                            modifier,
+                        )
+                        APP.sendEvent(self.view.viewport(), move)
+                    target = self.view.visualItemRect(self.original[5]).topLeft() + QPoint(250, 1)
+                    move = QMouseEvent(
+                        QEvent.MouseMove,
+                        QPointF(target),
+                        QPointF(self.view.viewport().mapToGlobal(target)),
+                        Qt.NoButton,
+                        Qt.LeftButton,
+                        modifier,
+                    )
+                    APP.sendEvent(self.view.viewport(), move)
+                    captured = tuple(self.view.reorder.moving)
+                    QTest.mouseRelease(self.view.viewport(), Qt.LeftButton, modifier, target)
+                    QTest.qWait(10)
+                    self.assertEqual(
+                        [id(item) for item in captured], [id(item) for item in self.original[:4]]
+                    )
+                    rows = [self.view.indexOfTopLevelItem(item) for item in self.original[:4]]
+                    self.assertEqual(rows, list(range(rows[0], rows[0] + 4)))
+
+    def test_ctrl_and_shift_click_without_drag_keep_normal_selection_rules(self):
+        def point(i):
+            result = self.view.visualItemRect(self.original[i]).center()
+            result.setX(250)
+            return result
+
+        QTest.mouseClick(self.view.viewport(), Qt.LeftButton, Qt.NoModifier, point(0))
+        QTest.mouseClick(self.view.viewport(), Qt.LeftButton, Qt.ShiftModifier, point(3))
+        self.assertEqual(len(self.view.selectedItems()), 4)
+        QTest.mouseClick(self.view.viewport(), Qt.LeftButton, Qt.ControlModifier, point(2))
+        self.assertEqual(
+            {id(x) for x in self.view.selectedItems()}, {id(self.original[i]) for i in (0, 1, 3)}
+        )
+        QTest.mouseClick(self.view.viewport(), Qt.LeftButton, Qt.NoModifier, point(0))
+        QTest.mouseClick(self.view.viewport(), Qt.LeftButton, Qt.ShiftModifier, point(3))
+        QTest.mouseClick(self.view.viewport(), Qt.LeftButton, Qt.ShiftModifier, point(1))
+        self.assertEqual(
+            {id(x) for x in self.view.selectedItems()}, {id(self.original[i]) for i in (0, 1)}
+        )
+
+    def test_double_click_drag_on_selected_block_keeps_all_four_files(self):
+        for item in self.original[:4]:
+            item.setSelected(True)
+        source = self.view.visualItemRect(self.original[2]).center()
+        source.setX(250)
+        press = QMouseEvent(
+            QEvent.MouseButtonDblClick,
+            QPointF(source),
+            QPointF(self.view.viewport().mapToGlobal(source)),
+            Qt.LeftButton,
+            Qt.LeftButton,
+            Qt.NoModifier,
+        )
+        APP.sendEvent(self.view.viewport(), press)
+        target = self.view.visualItemRect(self.original[5]).topLeft() + QPoint(250, 1)
+        move = QMouseEvent(
+            QEvent.MouseMove,
+            QPointF(target),
+            QPointF(self.view.viewport().mapToGlobal(target)),
+            Qt.NoButton,
+            Qt.LeftButton,
+            Qt.NoModifier,
+        )
+        APP.sendEvent(self.view.viewport(), move)
+        self.assertEqual(len(self.view.reorder.moving), 4)
+        QTest.mouseRelease(self.view.viewport(), Qt.LeftButton, Qt.NoModifier, target)
+        rows = [self.view.indexOfTopLevelItem(item) for item in self.original[:4]]
+        self.assertEqual(rows, list(range(rows[0], rows[0] + 4)))

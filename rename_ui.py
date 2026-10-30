@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QStyledItemDelegate,
     QHeaderView,
+    QSizePolicy,
 )
 from file_names import FileNameDelegate
 from build_channel import DEVELOPMENT
@@ -121,9 +122,13 @@ class RenamePanel(QWidget):
         self.start = QSpinBox()
         self.start.setRange(0, 999999)
         self.start.setValue(1)
+        self.start.setAlignment(Qt.AlignCenter)
+        self.start.setFixedWidth(96)
         self.digits = QSpinBox()
         self.digits.setRange(1, 8)
         self.digits.setValue(1)
+        self.digits.setAlignment(Qt.AlignCenter)
+        self.digits.setFixedWidth(72)
         self.number_position = QComboBox()
         positions(self.number_position)
         self.number_position.setCurrentIndex(1)
@@ -140,16 +145,27 @@ class RenamePanel(QWidget):
             ("없음", ""),
         ]:
             self.separator.addItem(label, value)
+
+        def parameter(label, control):
+            group = QWidget()
+            group.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+            box = QHBoxLayout(group)
+            box.setContentsMargins(0, 0, 0, 0)
+            box.setSpacing(6)
+            caption = QLabel(label)
+            caption.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+            box.addWidget(caption)
+            box.addWidget(control)
+            return group
+
+        self.separator.setFixedWidth(160)
         line = QHBoxLayout()
-        line.setSpacing(8)
-        line.addWidget(QLabel("시작 번호"))
-        line.addWidget(self.start)
-        line.addWidget(QLabel("자릿수"))
-        line.addWidget(self.digits)
-        line.addWidget(self.number_position)
-        line.addWidget(self.number_marker)
-        line.addWidget(QLabel("구분자"))
-        line.addWidget(self.separator)
+        line.setSpacing(12)
+        line.addWidget(parameter("시작 번호", self.start))
+        line.addWidget(parameter("자릿수", self.digits))
+        line.addWidget(self.number_position, 1)
+        line.addWidget(self.number_marker, 1)
+        line.addWidget(parameter("구분자", self.separator))
         form.addRow(self.number_enabled, line)
         self.message = QLabel()
         self.message.setObjectName("renameSummary")

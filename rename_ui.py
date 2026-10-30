@@ -56,10 +56,15 @@ class RenamePanel(QWidget):
         self.window = window
         self.files = window.files
         self.setObjectName("renamePanel")
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self.setStyleSheet("""
+            QWidget#renamePanel {background:#FFFFFF;border-top:1px solid #E2E8F0;}
+            QLabel#renameSummary {color:#718096;font-size:12px;background:transparent;border:0;}
             QWidget#renamePanel QComboBox {padding:5px 12px;min-height:18px;}
         """)
         self.rows = []
+        # Completed names stay settled until their settings/text are edited.
+        self.applied_names = {}
         self.journal = (
             Path(QStandardPaths.writableLocation(QStandardPaths.GenericDataLocation))
             / ("BakuriDevelopment" if DEVELOPMENT else "Bakuri")
@@ -147,11 +152,12 @@ class RenamePanel(QWidget):
         line.addWidget(self.separator)
         form.addRow(self.number_enabled, line)
         self.message = QLabel()
+        self.message.setObjectName("renameSummary")
+        self.message.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.message.setWordWrap(True)
         self.message.setToolTip(
-            "목록: 추가한 전체 파일 · 변경 예정: 체크한 파일 중 이름이 달라지는 파일 · 오류: 체크한 파일의 미리보기 오류"
+            "변경 예정: 체크한 파일 중 오류 없이 실제 이름이 바뀔 파일 · 오류: 체크한 파일의 미리보기 오류"
         )
-        layout.addWidget(self.message)
         line = QHBoxLayout()
         line.setSpacing(8)
         self.restore = QPushButton("실행 취소")
@@ -160,29 +166,33 @@ class RenamePanel(QWidget):
         self.run.setObjectName("convert")
         self.run.setFixedSize(164, 44)
         self.restore.setFixedSize(164, 44)
-        line.addStretch()
+        line.addWidget(self.message, 1)
         line.addWidget(self.run)
         line.addWidget(self.restore)
         layout.addLayout(line)
         self.base.textChanged.connect(self.base_changed)
         for field in [self.find, self.replace, self.string, self.string_marker, self.number_marker]:
-            field.textChanged.connect(self.refresh)
+            field.textChanged.connect(self.settings_changed)
         for combo in [self.number_position, self.string_position, self.separator]:
-            combo.currentIndexChanged.connect(self.refresh)
+            combo.currentIndexChanged.connect(self.settings_changed)
         for check in [self.number_enabled, self.text_enabled]:
-            check.toggled.connect(self.refresh)
-        self.start.valueChanged.connect(self.refresh)
-        self.digits.valueChanged.connect(self.refresh)
+            check.toggled.connect(self.settings_changed)
+        self.start.valueChanged.connect(self.settings_changed)
+        self.digits.valueChanged.connect(self.settings_changed)
         self.files.changed.connect(self.refresh)
         self.run.clicked.connect(self.execute)
         self.restore.clicked.connect(self.undo)
         self.files.itemChanged.connect(self.cell_changed)
         self.refresh()
 
+    def settings_changed(self, *args):
+        self.applied_names.clear()
+        self.refresh()
+
     def base_changed(self, value):
         if value:
             self.number_enabled.setChecked(True)
-        self.refresh()
+        self.settings_changed()
 
     def assign_values(self, values, items=None):
         if items is None:
@@ -196,12 +206,15 @@ class RenamePanel(QWidget):
         self.files.blockSignals(True)
         try:
             for item, value in zip(items, values):
+                self.applied_names.pop(item.data(0, Qt.UserRole), None)
                 item.setText(6, value)
         finally:
             self.files.blockSignals(False)
         self.refresh()
 
     def cell_changed(self, item, column):
+        if column in {4, 6}:
+            self.applied_names.pop(item.data(0, Qt.UserRole), None)
         if column == 4:
             self.files.blockSignals(True)
             try:
@@ -255,6 +268,7 @@ class RenamePanel(QWidget):
         self.files.blockSignals(True)
         try:
             for item, value in zip(items, values):
+                self.applied_names.pop(item.data(0, Qt.UserRole), None)
                 if column == 4:
                     item.setData(4, Qt.UserRole, value or None)
                 item.setText(column, value)
@@ -280,6 +294,9 @@ class RenamePanel(QWidget):
             self.files.item(i).data(0, Qt.UserRole): self.files.item(i).text(6)
             for i in range(self.files.count())
         }
+        for path in list(self.applied_names):
+            if path not in values:
+                self.applied_names.pop(path)
         self.rows = plan_rename(
             self.files.checked_paths(),
             RenameOptions(
@@ -289,9 +306,14 @@ class RenamePanel(QWidget):
                 string_position=self.string_position.currentData(),
                 string_marker=self.string_marker.text(),
                 manual_names={
-                    self.files.item(i).data(0, Qt.UserRole): self.files.item(i).data(4, Qt.UserRole)
-                    for i in range(self.files.count())
-                    if self.files.item(i).data(4, Qt.UserRole) is not None
+                    **self.applied_names,
+                    **{
+                        self.files.item(i)
+                        .data(0, Qt.UserRole): self.files.item(i)
+                        .data(4, Qt.UserRole)
+                        for i in range(self.files.count())
+                        if self.files.item(i).data(4, Qt.UserRole) is not None
+                    },
                 },
                 base=self.base.text(),
                 start=self.start.value(),
@@ -326,7 +348,7 @@ class RenamePanel(QWidget):
                 item.setForeground(5, QColor("#C42B1C" if row and row["error"] else "#60718A"))
         finally:
             self.files.blockSignals(False)
-        count = sum(r["changed"] for r in self.rows)
+        count = sum(r["changed"] and not r["error"] for r in self.rows)
         errors = sum(bool(r["error"]) for r in self.rows)
         self.run.setEnabled(bool(count) and not errors and not self.window.busy)
         state = ""
@@ -336,7 +358,7 @@ class RenamePanel(QWidget):
             pass
         self.restore.setEnabled(state == "complete" and not self.window.busy)
         self.message.setText(
-            f"목록 {self.files.count()}개 / 변경 예정 {count}개 / 오류 {errors}개"
+            f"변경 예정 {count}개 / 오류 {errors}개"
             + (
                 " · 미완료 기록을 먼저 확인해 주세요."
                 if state in {"working", "recovery_needed"}
@@ -349,6 +371,9 @@ class RenamePanel(QWidget):
 
     def update_paths(self, entries):
         mapping = {e["original"]: e["current"] for e in entries}
+        for original in mapping:
+            self.applied_names.pop(original, None)
+        self.applied_names.update({path: Path(path).name for path in mapping.values()})
         self.files.blockSignals(True)
         try:
             for i in range(self.files.count()):

@@ -136,20 +136,71 @@ class CompletionUiTests(unittest.TestCase):
         for path in paths:
             path.write_bytes(b"original")
         w.files.add_paths(list(map(str, paths)))
-        self.assertEqual(panel.message.text(), "목록 2개 / 변경 예정 0개 / 오류 0개")
+        self.assertEqual(panel.message.text(), "변경 예정 0개 / 오류 0개")
         panel.string.setText("새_")
-        self.assertEqual(panel.message.text(), "목록 2개 / 변경 예정 2개 / 오류 0개")
+        self.assertEqual(panel.message.text(), "변경 예정 2개 / 오류 0개")
         w.files.item(0).setCheckState(0, Qt.Unchecked)
-        self.assertEqual(panel.message.text(), "목록 2개 / 변경 예정 1개 / 오류 0개")
+        self.assertEqual(panel.message.text(), "변경 예정 1개 / 오류 0개")
         w.files.item(0).setCheckState(0, Qt.Checked)
         for i in range(2):
             w.files.item(i).setText(4, "중복.pdf")
-        self.assertEqual(panel.message.text(), "목록 2개 / 변경 예정 2개 / 오류 2개")
+        self.assertEqual(panel.message.text(), "변경 예정 0개 / 오류 2개")
         w.files.item(0).setCheckState(0, Qt.Unchecked)
-        self.assertEqual(panel.message.text(), "목록 2개 / 변경 예정 1개 / 오류 0개")
+        self.assertEqual(panel.message.text(), "변경 예정 1개 / 오류 0개")
         panel.execute()
-        self.assertTrue(panel.message.text().startswith("목록 2개 / 변경 예정"))
+        self.assertEqual(panel.message.text(), "변경 예정 0개 / 오류 0개")
         panel.undo()
-        self.assertTrue(panel.message.text().startswith("목록 2개 / 변경 예정"))
+        self.assertEqual(panel.message.text(), "변경 예정 0개 / 오류 0개")
         w.files.clear()
-        self.assertEqual(panel.message.text(), "목록 0개 / 변경 예정 0개 / 오류 0개")
+        self.assertEqual(panel.message.text(), "변경 예정 0개 / 오류 0개")
+
+    def test_completed_names_settle_until_settings_or_file_text_are_edited(self):
+        w = self.window
+        p = w.rename_panel
+        p.journal = Path(self.temp.name) / "rename.json"
+        w.mode_tabs.setCurrentIndex(1)
+        paths = [Path(self.temp.name) / name for name in ["a.pdf", "b.pdf"]]
+        for path in paths:
+            path.write_bytes(b"original")
+        w.files.add_paths(list(map(str, paths)))
+        p.string.setText("새_")
+        self.assertEqual(p.message.text(), "변경 예정 2개 / 오류 0개")
+        p.execute()
+        self.assertEqual(p.message.text(), "변경 예정 0개 / 오류 0개")
+        self.assertFalse(p.run.isEnabled())
+        p.refresh()
+        w.files.sort_names()
+        w.files.check_all(Qt.Unchecked)
+        w.files.check_all(Qt.Checked)
+        self.assertEqual(p.message.text(), "변경 예정 0개 / 오류 0개")
+        p.undo()
+        self.assertEqual(p.message.text(), "변경 예정 0개 / 오류 0개")
+        p.string.setText("다시_")
+        self.assertEqual(p.message.text(), "변경 예정 2개 / 오류 0개")
+        p.execute()
+        self.assertEqual(p.message.text(), "변경 예정 0개 / 오류 0개")
+        p.text_enabled.setChecked(True)
+        p.assign_values(["서울", "부산"])
+        self.assertEqual(p.message.text(), "변경 예정 2개 / 오류 0개")
+        p.execute()
+        self.assertEqual(p.message.text(), "변경 예정 0개 / 오류 0개")
+        p.assign_values(["대전", "광주"])
+        self.assertEqual(p.message.text(), "변경 예정 2개 / 오류 0개")
+
+    def test_summary_shares_button_line_and_uses_status_color_on_white_panel(self):
+        from PySide6.QtCore import QPoint
+        from PySide6.QtGui import QPalette
+
+        w = self.window
+        w.show()
+        w.mode_tabs.setCurrentIndex(1)
+        QTest.qWait(20)
+        p = w.rename_panel
+        self.assertEqual(p.message.palette().color(QPalette.WindowText).name(), "#718096")
+        self.assertLessEqual(
+            abs(p.message.geometry().center().y() - p.run.geometry().center().y()), 1
+        )
+        self.assertLess(p.message.geometry().right(), p.run.geometry().left())
+        image = p.grab().toImage()
+        self.assertEqual(image.pixelColor(QPoint(5, 5)).name(), "#ffffff")
+        self.assertNotIn("목록", p.message.text())

@@ -2,7 +2,7 @@
 
 import os, re
 from pathlib import Path
-from PySide6.QtCore import Qt, Signal, QSize, QTimer, QEvent
+from PySide6.QtCore import Qt, Signal, QSize, QTimer, QEvent, QItemSelectionModel
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
@@ -87,6 +87,7 @@ class Files(QTreeWidget):
         self.header().sectionResized.connect(self.name_column_resized)
         self.reorder = FileReorder(self)
         self.drag_origin = None
+        self.deferred_selection = None
 
     def name_column_resized(self, column, *_):
         self.reflow_timer.start(0)
@@ -222,12 +223,29 @@ class Files(QTreeWidget):
         self.sync_master()
 
     def mousePressEvent(self, event):
-        super().mousePressEvent(event)
+        point = event.position().toPoint()
+        item = self.itemAt(point)
+        self.deferred_selection = None
+        # Keep an existing block until release decides between click and drag.
+        if (
+            event.button() == Qt.LeftButton
+            and event.modifiers() == Qt.NoModifier
+            and point.x() > 36
+            and item is not None
+            and item.isSelected()
+            and len(self.selectedItems()) > 1
+        ):
+            self.deferred_selection = item
+            self.setCurrentItem(
+                item, max(0, self.columnAt(point.x())), QItemSelectionModel.NoUpdate
+            )
+            self.setFocus(Qt.MouseFocusReason)
+            event.accept()
+        else:
+            super().mousePressEvent(event)
         self.drag_origin = (
-            event.position().toPoint()
-            if event.button() == Qt.LeftButton
-            and self.itemAt(event.position().toPoint())
-            and event.position().x() > 36
+            point
+            if event.button() == Qt.LeftButton and item is not None and point.x() > 36
             else None
         )
 
@@ -256,6 +274,17 @@ class Files(QTreeWidget):
             event.accept()
             return
         self.drag_origin = None
+        if self.deferred_selection is not None and event.button() == Qt.LeftButton:
+            item = self.deferred_selection
+            self.deferred_selection = None
+            self.setCurrentItem(
+                item,
+                max(0, self.columnAt(int(event.position().x()))),
+                QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows,
+            )
+            self.setState(QAbstractItemView.NoState)
+            event.accept()
+            return
         super().mouseReleaseEvent(event)
 
     def finish_reorder(self, commit, point=None):
@@ -264,6 +293,7 @@ class Files(QTreeWidget):
                 self.reorder.drop(point)
             self.reorder.finish()
         self.drag_origin = None
+        self.deferred_selection = None
         self.viewport().releaseMouse()
         self.viewport().unsetCursor()
         self.setState(QAbstractItemView.NoState)
@@ -272,6 +302,7 @@ class Files(QTreeWidget):
         if event.type() == QEvent.UngrabMouse and hasattr(self, "reorder") and self.reorder.active:
             self.reorder.finish()
             self.drag_origin = None
+            self.deferred_selection = None
             self.viewport().unsetCursor()
         return super().viewportEvent(event)
 

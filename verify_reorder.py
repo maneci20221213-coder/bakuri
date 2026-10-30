@@ -103,6 +103,19 @@ with tempfile.TemporaryDirectory() as folder:
         assert view.count() == len(paths)
         assert len({view.item(i).data(0, 256) for i in range(view.count())}) == len(paths)
         assert all(path.read_bytes() == b"original" for path in paths)
+        view.clearSelection()
+        for item in original[:3]:
+            item.setSelected(True)
+        source = view.visualItemRect(original[1]).center()
+        source.setX(250)
+        print("Starting native three-file drag", flush=True)
+        move_native(source, QPoint(250, bottom + 22), QPoint(250, bottom - 16))
+        rows = [view.indexOfTopLevelItem(item) for item in original[:3]]
+        print("Group result", rows, view.verticalScrollBar().value(), flush=True)
+        assert rows == list(range(rows[0], rows[0] + 3)), "Selection did not move as one block"
+        assert rows[0] > 5, "Only one selected file moved"
+        assert len(view.selectedItems()) == 3
+        view.scrollToItem(original[1])
         # Render the insertion placeholder without holding mouse capture.
         view.reorder.begin()
         view.reorder.timer.stop()

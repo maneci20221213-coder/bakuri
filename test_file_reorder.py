@@ -172,3 +172,60 @@ class ReorderTests(unittest.TestCase):
         self.assertFalse(self.view.reorder.active)
         self.assertEqual(self.view.count(), 0)
         self.assertTrue(all(p.read_bytes() == b"original" for p in self.paths))
+
+    def test_ctrl_and_shift_selected_groups_survive_press_and_drag(self):
+        for modifier, indexes in [(Qt.ControlModifier, [1, 3]), (Qt.ShiftModifier, [1, 2, 3])]:
+            with self.subTest(modifier=modifier):
+                self.view.clearSelection()
+                for i, item in enumerate(self.original):
+                    if self.view.indexOfTopLevelItem(item) != i:
+                        self.view.takeTopLevelItem(self.view.indexOfTopLevelItem(item))
+                        self.view.insertTopLevelItem(i, item)
+                self.view.doItemsLayout()
+
+                def point(item):
+                    value = self.view.visualItemRect(item).center()
+                    value.setX(250)
+                    return value
+
+                QTest.mouseClick(
+                    self.view.viewport(), Qt.LeftButton, Qt.NoModifier, point(self.original[1])
+                )
+                QTest.mouseClick(
+                    self.view.viewport(), Qt.LeftButton, modifier, point(self.original[3])
+                )
+                self.assertEqual(
+                    {id(x) for x in self.view.selectedItems()},
+                    {id(self.original[i]) for i in indexes},
+                )
+                source = point(self.original[1])
+                destination = self.view.visualItemRect(self.original[5]).topLeft() + QPoint(250, 1)
+                QTest.mousePress(self.view.viewport(), Qt.LeftButton, Qt.NoModifier, source)
+                self.assertEqual(len(self.view.selectedItems()), len(indexes))
+                move = QMouseEvent(
+                    QEvent.MouseMove,
+                    QPointF(destination),
+                    QPointF(self.view.viewport().mapToGlobal(destination)),
+                    Qt.NoButton,
+                    Qt.LeftButton,
+                    Qt.NoModifier,
+                )
+                APP.sendEvent(self.view.viewport(), move)
+                self.assertEqual(
+                    [id(x) for x in self.view.reorder.moving],
+                    [id(self.original[i]) for i in indexes],
+                )
+                QTest.mouseRelease(self.view.viewport(), Qt.LeftButton, Qt.NoModifier, destination)
+                QTest.qWait(20)
+                rows = [self.view.indexOfTopLevelItem(self.original[i]) for i in indexes]
+                self.assertEqual(rows, list(range(rows[0], rows[0] + len(rows))))
+                self.assertGreater(rows[0], 1)
+
+    def test_click_without_drag_collapses_existing_multiselection(self):
+        for item in self.original[:3]:
+            item.setSelected(True)
+        point = self.view.visualItemRect(self.original[1]).center()
+        point.setX(250)
+        QTest.mouseClick(self.view.viewport(), Qt.LeftButton, Qt.NoModifier, point)
+        self.assertEqual(self.view.selectedItems(), [self.original[1]])
+        self.assertFalse(self.view.reorder.active)

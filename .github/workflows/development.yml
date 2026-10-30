@@ -47,7 +47,7 @@ jobs:
         run: ./build_dev.ps1
       - uses: actions/upload-artifact@v4
         with:
-          name: Bakuri-Development-0.15.0-dev.12
+          name: Bakuri-Development-0.15.0-dev.13
           path: DevArtifacts/*
           if-no-files-found: error
           retention-days: 30

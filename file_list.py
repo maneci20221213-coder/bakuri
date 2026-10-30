@@ -51,7 +51,7 @@ class Files(QTreeWidget):
         self.setColumnWidth(3, 115)
         self.setIconSize(QSize(34, 38))
         self.setAcceptDrops(True)
-        self.setDragDropMode(QAbstractItemView.InternalMove)
+        self.setDragDropMode(QAbstractItemView.DropOnly)
         self.setAutoScroll(False)
         self.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.setDropIndicatorShown(False)
@@ -86,6 +86,7 @@ class Files(QTreeWidget):
         self.changed.connect(self.request_name_fit)
         self.header().sectionResized.connect(self.name_column_resized)
         self.reorder = FileReorder(self)
+        self.drag_origin = None
 
     def name_column_resized(self, column, *_):
         self.reflow_timer.start(0)
@@ -151,6 +152,8 @@ class Files(QTreeWidget):
         self.reflow_names()
 
     def delete_selected(self):
+        if hasattr(self, "reorder") and self.reorder.active:
+            self.finish_reorder(False)
         if not self.isEnabled():
             return
         for item in self.selectedItems():
@@ -158,6 +161,11 @@ class Files(QTreeWidget):
         self.sync_master()
 
     def keyPressEvent(self, event):
+        if self.reorder.active:
+            if event.key() == Qt.Key_Escape:
+                self.finish_reorder(False)
+            event.accept()
+            return
         if event.key() == Qt.Key_Delete:
             self.delete_selected()
             event.accept()
@@ -201,53 +209,99 @@ class Files(QTreeWidget):
         return self.topLevelItem(i)
 
     def takeItem(self, i):
+        if hasattr(self, "reorder") and self.reorder.active:
+            self.finish_reorder(False)
         item = self.takeTopLevelItem(i)
         self.sync_master()
         return item
 
     def clear(self):
+        if hasattr(self, "reorder") and self.reorder.active:
+            self.finish_reorder(False)
         super().clear()
         self.sync_master()
 
-    def startDrag(self, supported_actions):
-        if self.isEnabled():
-            self.reorder.start()
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        self.drag_origin = (
+            event.position().toPoint()
+            if event.button() == Qt.LeftButton
+            and self.itemAt(event.position().toPoint())
+            and event.position().x() > 36
+            else None
+        )
+
+    def mouseMoveEvent(self, event):
+        if self.drag_origin is not None and event.buttons() & Qt.LeftButton and self.isEnabled():
+            if (
+                not self.reorder.active
+                and (event.position().toPoint() - self.drag_origin).manhattanLength()
+                >= QApplication.startDragDistance()
+            ):
+                if self.reorder.begin():
+                    self.viewport().grabMouse()
+                    self.viewport().setCursor(Qt.ClosedHandCursor)
+            if self.reorder.active:
+                self.reorder.update_at(event.position().toPoint())
+                event.accept()
+                return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if self.reorder.active and event.button() == Qt.LeftButton:
+            self.finish_reorder(
+                self.viewport().rect().contains(event.position().toPoint()),
+                event.position().toPoint(),
+            )
+            event.accept()
+            return
+        self.drag_origin = None
+        super().mouseReleaseEvent(event)
+
+    def finish_reorder(self, commit, point=None):
+        if self.reorder.active:
+            if commit:
+                self.reorder.drop(point)
+            self.reorder.finish()
+        self.drag_origin = None
+        self.viewport().releaseMouse()
+        self.viewport().unsetCursor()
+        self.setState(QAbstractItemView.NoState)
+
+    def viewportEvent(self, event):
+        if event.type() == QEvent.UngrabMouse and hasattr(self, "reorder") and self.reorder.active:
+            self.reorder.finish()
+            self.drag_origin = None
+            self.viewport().unsetCursor()
+        return super().viewportEvent(event)
+
+    def hideEvent(self, event):
+        if hasattr(self, "reorder") and self.reorder.active:
+            self.finish_reorder(False)
+        super().hideEvent(event)
 
     def dragEnterEvent(self, e):
-        if self.reorder.accepts(e):
-            e.setDropAction(Qt.MoveAction)
-            e.accept()
-        elif e.mimeData().hasUrls():
+        if e.mimeData().hasUrls():
             e.acceptProposedAction()
         else:
             e.ignore()
 
     def dragMoveEvent(self, e):
-        if self.reorder.accepts(e):
-            self.reorder.update_at(e.position().toPoint())
-            e.setDropAction(Qt.MoveAction)
-            e.accept()
-        elif e.mimeData().hasUrls():
+        if e.mimeData().hasUrls():
             e.acceptProposedAction()
         else:
             e.ignore()
 
-    def dragLeaveEvent(self, e):
-        # Our own timer remains active outside the viewport; finish handles cancel.
-        e.accept()
-
     def dropEvent(self, e):
-        if self.reorder.accepts(e):
-            self.reorder.drop(e.position().toPoint())
-            e.setDropAction(Qt.MoveAction)
-            e.accept()
-        elif e.mimeData().hasUrls():
+        if e.mimeData().hasUrls():
             self.add_paths([u.toLocalFile() for u in e.mimeData().urls()])
             e.acceptProposedAction()
         else:
             e.ignore()
 
     def add_paths(self, paths):
+        if hasattr(self, "reorder") and self.reorder.active:
+            self.finish_reorder(False)
         existing = {
             os.path.normcase(self.item(i).data(0, Qt.UserRole)) for i in range(self.count())
         }
@@ -289,6 +343,8 @@ class Files(QTreeWidget):
         self.sync_master()
 
     def sort_names(self):
+        if hasattr(self, "reorder") and self.reorder.active:
+            self.finish_reorder(False)
         items = [self.takeTopLevelItem(0) for _ in range(self.count())]
         self.addTopLevelItems(sorted(items, key=lambda item: natural_key(item.text(2))))
         self.sync_master()

@@ -1,4 +1,4 @@
-"""CI-only Windows OLE drag; independent input process guarantees mouse release."""
+"""CI-only Windows mouse capture drag; independent input guarantees mouse release."""
 
 import json
 import os
@@ -103,7 +103,7 @@ with tempfile.TemporaryDirectory() as folder:
         assert view.count() == len(paths)
         assert len({view.item(i).data(0, 256) for i in range(view.count())}) == len(paths)
         assert all(path.read_bytes() == b"original" for path in paths)
-        # Render the insertion placeholder outside the native OLE modal loop.
+        # Render the insertion placeholder without holding mouse capture.
         view.reorder.begin()
         view.reorder.timer.stop()
         view.reorder.update_at(view.visualItemRect(view.item(3)).topLeft() + QPoint(250, 1))

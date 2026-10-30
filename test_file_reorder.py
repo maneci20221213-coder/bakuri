@@ -7,8 +7,8 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
-from PySide6.QtCore import QPoint, Qt, QMimeData, QUrl, QPointF
-from PySide6.QtGui import QDropEvent
+from PySide6.QtCore import QPoint, Qt, QMimeData, QUrl, QPointF, QEvent
+from PySide6.QtGui import QDropEvent, QMouseEvent
 from PySide6.QtWidgets import QApplication
 from PySide6.QtTest import QTest
 from file_list import Files
@@ -124,3 +124,51 @@ class ReorderTests(unittest.TestCase):
         self.view.dropEvent(event)
         self.assertTrue(event.isAccepted())
         self.assertEqual(self.view.count(), 36)
+
+    def test_mouse_capture_commits_on_release_and_escape_restores_order(self):
+        source = self.view.visualItemRect(self.original[0]).center()
+        source.setX(250)
+        destination = self.view.visualItemRect(self.original[3]).center()
+        destination.setX(250)
+        QTest.mousePress(self.view.viewport(), Qt.LeftButton, Qt.NoModifier, source)
+        move = QMouseEvent(
+            QEvent.MouseMove,
+            QPointF(destination),
+            QPointF(self.view.viewport().mapToGlobal(destination)),
+            Qt.NoButton,
+            Qt.LeftButton,
+            Qt.NoModifier,
+        )
+        APP.sendEvent(self.view.viewport(), move)
+        self.assertTrue(self.view.reorder.active)
+        QTest.mouseRelease(self.view.viewport(), Qt.LeftButton, Qt.NoModifier, destination)
+        QTest.qWait(20)
+        self.assertFalse(self.view.reorder.active)
+        self.assertEqual(self.view.indexOfTopLevelItem(self.original[0]), 2)
+        order = self.names()
+        source = self.view.visualItemRect(self.original[0]).center()
+        source.setX(250)
+        destination = QPoint(250, 5)
+        QTest.mousePress(self.view.viewport(), Qt.LeftButton, Qt.NoModifier, source)
+        move = QMouseEvent(
+            QEvent.MouseMove,
+            QPointF(destination),
+            QPointF(self.view.viewport().mapToGlobal(destination)),
+            Qt.NoButton,
+            Qt.LeftButton,
+            Qt.NoModifier,
+        )
+        APP.sendEvent(self.view.viewport(), move)
+        self.assertTrue(self.view.reorder.active)
+        QTest.keyClick(self.view, Qt.Key_Escape)
+        QTest.mouseRelease(self.view.viewport(), Qt.LeftButton, Qt.NoModifier, destination)
+        self.assertFalse(self.view.reorder.active)
+        self.assertEqual(self.names(), order)
+
+    def test_clearing_list_during_drag_cancels_before_items_are_deleted(self):
+        self.select([0])
+        self.view.reorder.update_at(QPoint(250, self.view.viewport().height() - 15))
+        self.view.clear()
+        self.assertFalse(self.view.reorder.active)
+        self.assertEqual(self.view.count(), 0)
+        self.assertTrue(all(p.read_bytes() == b"original" for p in self.paths))

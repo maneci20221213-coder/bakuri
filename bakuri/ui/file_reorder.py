@@ -1,11 +1,9 @@
 """Live row insertion preview, continuous edge scrolling and rollback on cancelled drag."""
 
 from PySide6.QtCore import Qt, QTimer, QPoint
-from PySide6.QtGui import QCursor, QDrag
-from PySide6.QtCore import QMimeData, QItemSelectionModel
+from PySide6.QtGui import QCursor
+from PySide6.QtCore import QItemSelectionModel
 from PySide6.QtWidgets import QLabel, QAbstractItemView
-
-MIME = "application/x-bakuri-file-order"
 
 
 class FileReorder:
@@ -40,26 +38,6 @@ class FileReorder:
         self.active = True
         self.timer.start()
         return True
-
-    def start(self):
-        if not self.begin():
-            return
-        view = self.view
-        drag = QDrag(view)
-        mime = QMimeData()
-        mime.setData(MIME, b"move")
-        drag.setMimeData(mime)
-        rect = view.visualItemRect(self.moving[0]).intersected(view.viewport().rect())
-        if not rect.isEmpty():
-            drag.setPixmap(view.viewport().grab(rect))
-            drag.setHotSpot(QPoint(min(40, rect.width() - 1), min(15, rect.height() - 1)))
-        try:
-            drag.exec(Qt.MoveAction, Qt.MoveAction)
-        finally:
-            self.finish()
-
-    def accepts(self, event):
-        return self.active and event.source() is self.view and event.mimeData().hasFormat(MIME)
 
     def update_at(self, point):
         if not self.active:

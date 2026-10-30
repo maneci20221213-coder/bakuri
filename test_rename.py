@@ -67,13 +67,15 @@ os.environ['QT_QPA_PLATFORM']='offscreen'
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt
 from app import Window
+from build_channel import DEVELOPMENT,SETTINGS_APP
+from version import VERSION
 APP=QApplication.instance() or QApplication([])
 class RenameUiTests(unittest.TestCase):
  def test_preview_checkbox_apply_undo_and_development_isolation(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d).resolve();a=root/'자료.txt';b=root/'다른.txt';a.write_bytes(b'a');b.write_bytes(b'b');w=Window()
    try:
-    self.assertIn('개발용',w.windowTitle());self.assertEqual(w.settings.applicationName(),'FileConverterDevelopment');self.assertTrue(w.updater.disabled)
+    self.assertIn(VERSION,w.windowTitle());self.assertEqual('개발용' in w.windowTitle(),DEVELOPMENT);self.assertEqual(w.settings.applicationName(),SETTINGS_APP);self.assertEqual(w.updater.disabled,DEVELOPMENT)
     w.rename_panel.journal=root/'history.json';w.files.add_paths([str(a),str(b)]);w.files.item(1).setCheckState(0,Qt.Unchecked)
     w.mode_tabs.setCurrentIndex(1);w.rename_panel.string.setText('최종_')
     self.assertEqual(w.files.item(0).text(4),'최종_자료.txt');self.assertEqual(w.files.item(1).text(4),'')

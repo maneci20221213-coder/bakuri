@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt,QStandardPaths
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QLineEdit,QLabel,QSpinBox,QPushButton,QMessageBox,QFormLayout,QComboBox,QCheckBox,QApplication,QStyledItemDelegate,QHeaderView)
 from file_names import FileNameDelegate
+from build_channel import DEVELOPMENT
 from rename_engine import preview,apply,undo,fill_down,_text_lines
 
 class TextDelegate(FileNameDelegate):
@@ -17,7 +18,7 @@ def positions(combo):
 class RenamePanel(QWidget):
     def __init__(self,window):
         super().__init__();self.window=window;self.files=window.files;self.rows=[]
-        self.journal=Path(QStandardPaths.writableLocation(QStandardPaths.GenericDataLocation))/'BakuriDevelopment'/'rename-history.json'
+        self.journal=Path(QStandardPaths.writableLocation(QStandardPaths.GenericDataLocation))/('BakuriDevelopment' if DEVELOPMENT else 'Bakuri')/'rename-history.json'
         self.files.setColumnCount(7);self.files.headerItem().setText(6,'추가할 문자열');self.files.setColumnWidth(6,210);self.files.setItemDelegate(TextDelegate(self.files))
         self.files.headerItem().setToolTip(4,'두 번 클릭해 직접 수정하거나, 셀 선택 후 Ctrl+V로 한 열을 붙여넣으세요. 확장자는 유지합니다. 빈 값은 자동 이름으로 돌아갑니다.')
         self.files.headerItem().setToolTip(6,'두 번 클릭해 수정 · Ctrl+V로 선택 셀부터 체크한 파일에 한 줄씩 붙여넣기 · 빈 줄은 위 문구로 채움')
@@ -37,8 +38,6 @@ class RenamePanel(QWidget):
         self.separator=QComboBox()
         for label,value in [('밑줄 _','_'),('하이픈 -','-'),('공백',' '),('마침표 .','.'),('없음','')]:self.separator.addItem(label,value)
         line=QHBoxLayout();line.setSpacing(8);line.addWidget(QLabel('시작 번호'));line.addWidget(self.start);line.addWidget(QLabel('자릿수'));line.addWidget(self.digits);line.addWidget(self.number_position);line.addWidget(self.number_marker);line.addWidget(QLabel('구분자'));line.addWidget(self.separator);form.addRow(self.number_enabled,line)
-        self.fill=QPushButton('빈 문구 채우기');self.clear=QPushButton('선택 문구 비우기')
-        self.text_tools=QWidget();tools=QHBoxLayout(self.text_tools);tools.setContentsMargins(0,0,0,0);tools.addWidget(self.fill);tools.addWidget(self.clear);tools.addStretch();form.addRow('',self.text_tools)
         self.message=QLabel();self.message.setWordWrap(True);layout.addWidget(self.message)
         line=QHBoxLayout();line.setSpacing(8);self.restore=QPushButton('마지막 변경 되돌리기');self.run=QPushButton('이름 변경 적용');self.run.setObjectName('convert');line.addWidget(self.restore);line.addStretch();line.addWidget(self.run);layout.addLayout(line)
         self.base.textChanged.connect(self.base_changed)
@@ -46,14 +45,14 @@ class RenamePanel(QWidget):
         for combo in [self.number_position,self.string_position,self.separator]:combo.currentIndexChanged.connect(self.refresh)
         for check in [self.number_enabled,self.text_enabled]:check.toggled.connect(self.refresh)
         self.start.valueChanged.connect(self.refresh);self.digits.valueChanged.connect(self.refresh);self.files.changed.connect(self.refresh)
-        self.run.clicked.connect(self.execute);self.restore.clicked.connect(self.undo);self.fill.clicked.connect(self.fill_cells);self.clear.clicked.connect(lambda:self.assign_values(['']*len(self.files.checked_paths())))
+        self.run.clicked.connect(self.execute);self.restore.clicked.connect(self.undo)
         self.files.itemChanged.connect(self.cell_changed)
         self.refresh()
     def base_changed(self,value):
         if value:self.number_enabled.setChecked(True)
         self.refresh()
-    def assign_values(self,values):
-        items=[self.files.item(i) for i in range(self.files.count()) if self.files.item(i).checkState(0)==Qt.Checked]
+    def assign_values(self,values,items=None):
+        if items is None:items=[self.files.item(i) for i in range(self.files.count()) if self.files.item(i).checkState(0)==Qt.Checked]
         if len(items)!=len(values):raise ValueError('선택 파일 수가 바뀌었습니다. 다시 붙여넣어 주세요.')
         self.files.blockSignals(True)
         try:
@@ -81,6 +80,7 @@ class RenamePanel(QWidget):
         except ValueError as exc:QMessageBox.information(self,'붙여넣기 확인',str(exc));return True
         if isinstance(focus,QLineEdit):
             delegate=self.files.itemDelegate();delegate.closeEditor.emit(focus,QStyledItemDelegate.RevertModelCache)
+        if column==6:self.assign_values(values,items);return True
         self.files.blockSignals(True)
         try:
             for item,value in zip(items,values):
@@ -88,15 +88,10 @@ class RenamePanel(QWidget):
                 item.setText(column,value)
         finally:self.files.blockSignals(False)
         self.refresh();return True
-    def fill_cells(self):
-        items=[self.files.item(i) for i in range(self.files.count()) if self.files.item(i).checkState(0)==Qt.Checked]
-        try:values=fill_down('\n'.join(item.text(6) for item in items)+'\n',len(items))
-        except ValueError as exc:QMessageBox.information(self,'채우기 확인',str(exc));return
-        self.assign_values(values)
     def refresh(self,*args):
         active=self.text_enabled.isChecked()
         self.files.setColumnHidden(6,self.window.mode_tabs.currentIndex()!=1 or not active)
-        self.string.setEnabled(not active);self.text_tools.setVisible(active);self.string_position.setToolTip('파일별 문자열을 붙일 위치' if active else '공통 문자열을 붙일 위치')
+        self.string.setEnabled(not active);self.string_position.setToolTip('파일별 문자열을 붙일 위치' if active else '공통 문자열을 붙일 위치')
         self.string_marker.setVisible(self.string_position.currentData() in {'before_marker','after_marker'})
         self.number_marker.setVisible(self.number_position.currentData() in {'before_marker','after_marker'})
         values={self.files.item(i).data(0,Qt.UserRole):self.files.item(i).text(6) for i in range(self.files.count())}

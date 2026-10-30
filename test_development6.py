@@ -9,6 +9,7 @@ from file_names import name_lines
 from file_list import Files
 from settings_ui import SettingsDialog
 from app import Window
+from build_channel import DEVELOPMENT
 APP=QApplication.instance() or QApplication([])
 
 class NameDisplayTests(unittest.TestCase):
@@ -62,14 +63,15 @@ class DeveloperHotkeyTests(unittest.TestCase):
    w=Window()
    try:
     fake.SelectionWatcher.return_value.start.assert_called_once();fake.MouseWatcher.return_value.start.assert_called_once()
-    fake.initialize_startup.assert_not_called();fake.migrate_menu.assert_not_called()
-    self.assertTrue(w.updater.disabled)
+    if DEVELOPMENT:fake.initialize_startup.assert_not_called();fake.migrate_menu.assert_not_called()
+    else:fake.initialize_startup.assert_called_once();fake.migrate_menu.assert_called_once()
+    self.assertEqual(w.updater.disabled,DEVELOPMENT)
     w.popup.origin=123;w.popup_visibility(True)
     self.assertTrue(w.watcher.popup_open);self.assertEqual(w.watcher.popup_windows[0],123)
    finally:w.tray.hide();w.hide();w.deleteLater()
  def test_hotkey_settings_are_enabled_and_default_is_distinct(self):
   from build_channel import DEFAULT_HOTKEY
-  self.assertEqual(DEFAULT_HOTKEY,'F9');w=Window()
+  self.assertEqual(DEFAULT_HOTKEY,'F9' if DEVELOPMENT else '` (백틱)');w=Window()
   try:
-   dialog=SettingsDialog(w);self.assertTrue(dialog.enabled.isEnabled());self.assertTrue(dialog.key.isEnabled());self.assertFalse(dialog.auto.isEnabled());self.assertFalse(dialog.explorer.isEnabled());dialog.reject()
+   dialog=SettingsDialog(w);self.assertTrue(dialog.enabled.isEnabled());self.assertTrue(dialog.key.isEnabled());self.assertEqual(dialog.auto.isEnabled(),not DEVELOPMENT and __import__('sys').platform=='win32');self.assertEqual(dialog.explorer.isEnabled(),not DEVELOPMENT);dialog.reject()
   finally:w.tray.hide();w.hide();w.deleteLater()

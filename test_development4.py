@@ -30,7 +30,7 @@ class RenameListTests(unittest.TestCase):
   self.assertEqual([self.w.files.item(i).text(6) for i in range(4)],['서울','서울','부산','부산'])
   self.assertEqual(self.w.files.item(0).text(4),'서울a.PDF')
   self.panel.text_enabled.setChecked(False);self.assertTrue(self.w.files.isColumnHidden(6));self.assertEqual(self.w.files.item(0).text(4),'a.PDF')
-  self.panel.text_enabled.setChecked(True);self.panel.assign_values(['지역','','동네','']);self.panel.fill.click()
+  self.panel.text_enabled.setChecked(True);self.paste(6,'지역\n\n동네')
   self.assertEqual([self.w.files.item(i).text(6) for i in range(4)],['지역','지역','동네','동네'])
   self.w.mode_tabs.setCurrentIndex(0);self.assertTrue(self.w.files.isColumnHidden(6))
  def test_name_paste_starts_at_current_skips_unchecked_no_padding(self):

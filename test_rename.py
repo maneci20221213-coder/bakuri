@@ -75,7 +75,7 @@ class RenameUiTests(unittest.TestCase):
    try:
     self.assertIn('개발용',w.windowTitle());self.assertEqual(w.settings.applicationName(),'FileConverterDevelopment');self.assertTrue(w.updater.disabled)
     w.rename_panel.journal=root/'history.json';w.files.add_paths([str(a),str(b)]);w.files.item(1).setCheckState(0,Qt.Unchecked)
-    w.mode_tabs.setCurrentIndex(1);w.rename_panel.prefix.setText('최종_')
+    w.mode_tabs.setCurrentIndex(1);w.rename_panel.string.setText('최종_')
     self.assertEqual(w.files.item(0).text(4),'최종_자료.txt');self.assertEqual(w.files.item(1).text(4),'')
     w.rename_panel.execute();self.assertTrue((root/'최종_자료.txt').exists());self.assertTrue(b.exists());self.assertEqual(w.files.item(0).data(0,Qt.UserRole),str(root/'최종_자료.txt'))
     w.rename_panel.undo();self.assertTrue(a.exists());self.assertEqual(w.files.item(0).data(0,Qt.UserRole),str(a))

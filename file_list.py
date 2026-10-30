@@ -24,7 +24,7 @@ class Files(QTreeWidget):
         self.selection_caption=QLabel('선택',self.header().viewport()); self.selection_caption.setObjectName('selectionCaption'); self.selection_caption.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.master=QCheckBox(self.header().viewport()); self.master.setTristate(True); self.master.setToolTip('전체 선택 / 해제'); self.master.setAccessibleName('전체 선택')
         self.master.clicked.connect(lambda:self.check_all(Qt.Checked if self.master.checkState()!=Qt.Unchecked else Qt.Unchecked))
-        self.header().sectionResized.connect(self.place_master); self.header().geometriesChanged.connect(self.place_master); self.header().sectionMoved.connect(self.place_master); self.itemChanged.connect(lambda *_:self.sync_master()); self.place_master()
+        self.header().sectionResized.connect(self.place_master); self.header().geometriesChanged.connect(self.place_master); self.header().sectionMoved.connect(self.place_master); self.itemChanged.connect(lambda item,column:self.sync_master() if column==0 else None); self.place_master()
     def delete_selected(self):
         if not self.isEnabled(): return
         for item in self.selectedItems(): self.takeTopLevelItem(self.indexOfTopLevelItem(item))

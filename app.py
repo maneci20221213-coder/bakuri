@@ -209,12 +209,17 @@ class Window(QWidget):
         from rename_ui import RenamePanel
         self.rename_panel=RenamePanel(self);layout.insertWidget(layout.count()-2,self.rename_panel)
         self.files.header().moveSection(self.files.header().visualIndex(6),self.files.header().visualIndex(4))
+        self.conversion_size=self.size();self.previous_mode=0
         def change_mode(index):
+            if index==1 and self.previous_mode==0:self.conversion_size=self.size()
             self.setMinimumWidth(1100 if index==1 else 760)
             self.rename_panel.setVisible(index==1);options.setVisible(index==0);footer.setVisible(index==0)
-            for column in [4,5,6]:self.files.setColumnHidden(column,index==0)
+            for column in [4,5]:self.files.setColumnHidden(column,index==0)
+            self.files.setColumnHidden(6,index==0 or not self.rename_panel.text_enabled.isChecked())
             for column in [1,3]:self.files.setColumnHidden(column,index==1)
-            self.rename_panel.refresh()
+            self.layout().invalidate();self.layout().activate()
+            if index==0 and self.previous_mode==1 and not self.isMaximized():self.resize(self.conversion_size)
+            self.previous_mode=index;self.rename_panel.refresh()
         self.mode_tabs.currentChanged.connect(change_mode);change_mode(0)
         app_icon=icon('app');self.setWindowIcon(app_icon)
         self.tray=QSystemTrayIcon(icon('tray'),self); menu=QMenu()
@@ -244,6 +249,8 @@ class Window(QWidget):
     def eventFilter(self,obj,event):
         if event.type()==QEvent.KeyPress and event.matches(QKeySequence.Paste) and isinstance(obj,QWidget) and (obj is self or self.isAncestorOf(obj)):
             focus=QApplication.focusWidget() or obj
+            if not QApplication.activeModalWidget() and self.mode_tabs.currentIndex()==1 and self.rename_panel.paste_cells(focus):
+                event.accept();return True
             if QApplication.activeModalWidget() or isinstance(focus,(QLineEdit,QTextEdit,QPlainTextEdit,QAbstractSpinBox)):return super().eventFilter(obj,event)
             mime=QApplication.clipboard().mimeData()
             if mime and mime.hasUrls():

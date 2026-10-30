@@ -19,7 +19,7 @@ class RenameOptionsTests(unittest.TestCase):
     row=preview([p],number_enabled=True,number_position=pos,number_marker=marker)[0]
     self.assertFalse(row['error']);self.assertEqual(row['name'],expected)
    value={str(p):'서울'}
-   self.assertEqual(preview([p],text_by_source=value,text_position='before')[0]['name'],'서울_보고서_최종.PDF')
+   self.assertEqual(preview([p],text_by_source=value,text_position='before')[0]['name'],'서울보고서_최종.PDF')
    self.assertEqual(preview([p],text_by_source=value,text_mode='replace',number_enabled=True)[0]['name'],'서울_001.PDF')
    self.assertTrue(preview([p],number_enabled=True,number_position='before_marker',number_marker='없음')[0]['error'])
  def test_multiline_preserves_empty_rows_and_rejects_mismatch(self):
@@ -47,14 +47,14 @@ class DevelopmentUiTests(unittest.TestCase):
   self.w.busy=True;self.w.paste_files();self.assertEqual(self.w.files.count(),0);self.w.busy=False
  def test_per_file_text_survives_sort_uncheck_and_rename_undo(self):
   b=self.file('b.txt');a=self.file('a.txt');w=self.w;w.mode_tabs.setCurrentIndex(1);w.files.add_paths([str(b),str(a)]);panel=w.rename_panel
-  panel.assign_values(['부산','서울']);w.files.sort_names()
+  panel.text_enabled.setChecked(True);panel.assign_values(['부산','서울']);w.files.sort_names()
   self.assertEqual([w.files.item(i).text(6) for i in range(2)],['서울','부산'])
-  panel.text_position.setCurrentIndex(1);self.assertEqual(w.files.item(0).text(4),'a_서울.txt')
-  w.files.item(0).setText(6,'서울수정');self.assertEqual(w.files.item(0).text(4),'a_서울수정.txt');w.files.item(0).setText(6,'서울')
+  panel.text_position.setCurrentIndex(1);self.assertEqual(w.files.item(0).text(4),'a서울.txt')
+  w.files.item(0).setText(6,'서울수정');self.assertEqual(w.files.item(0).text(4),'a서울수정.txt');w.files.item(0).setText(6,'서울')
   w.files.item(0).setCheckState(0,Qt.Unchecked);self.assertEqual(w.files.item(0).text(6),'서울')
   w.files.item(0).setCheckState(0,Qt.Checked);panel.replace_name.setChecked(True);panel.number_enabled.setChecked(True);panel.number_position.setCurrentIndex(0)
-  self.assertEqual(w.files.item(0).text(4),'001_서울.txt')
-  panel.execute();self.assertTrue((self.root/'001_서울.txt').exists());self.assertEqual(w.files.item(0).text(6),'서울')
+  self.assertEqual(w.files.item(0).text(4),'1_서울.txt')
+  panel.execute();self.assertTrue((self.root/'1_서울.txt').exists());self.assertEqual(w.files.item(0).text(6),'서울')
   panel.undo();self.assertTrue(a.exists());self.assertEqual(w.files.item(0).text(6),'서울')
   editor=panel.files.itemDelegate().createEditor(panel.files.viewport(),None,panel.files.model().index(0,2));self.assertIsNone(editor)
  def test_only_completion_toast_and_tray_progress_stop(self):

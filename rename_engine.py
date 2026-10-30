@@ -53,7 +53,7 @@ def fill_down(text,count):
         values.append(previous)
     return values
 
-def preview(paths,find='',replace='',prefix='',suffix='',base='',start=1,digits=3,number_enabled=None,number_position='after',number_marker='',separator='_',text_by_source=None,text_position='before',text_marker='',text_mode='insert',**unused):
+def preview(paths,find='',replace='',prefix='',suffix='',base='',start=1,digits=3,number_enabled=None,number_position='after',number_marker='',separator='_',text_by_source=None,text_position='before',text_marker='',text_mode='insert',string='',string_position='before',string_marker='',manual_names=None,**unused):
     rows=[]
     for index,source in enumerate(paths):
         source=Path(source).absolute();stem=base or source.stem;error=''
@@ -61,11 +61,16 @@ def preview(paths,find='',replace='',prefix='',suffix='',base='',start=1,digits=
         try:
             custom=(text_by_source or {}).get(str(source),'')
             if custom:
-                stem=custom if text_mode=='replace' else insert_token(stem,custom,text_position,separator,text_marker)
+                stem=custom if text_mode=='replace' else insert_token(stem,custom,text_position,'',text_marker)
             if number_enabled if number_enabled is not None else bool(base):
                 stem=insert_token(stem,f'{start+index:0{digits}d}',number_position,separator,number_marker)
+            stem=insert_token(stem,string,string_position,'',string_marker)
         except ValueError as exc:error=str(exc)
-        name=prefix+stem+suffix+source.suffix;error=error or invalid(name)
+        name=prefix+stem+suffix+source.suffix
+        if str(source) in (manual_names or {}):
+            name=manual_names[str(source)];error=''
+            if source.suffix and not name.lower().endswith(source.suffix.lower()):name+=source.suffix
+        error=error or invalid(name)
         target=source.with_name(name) if not re.search(r'[/\\\x00]',name) else source
         try:
             if source.is_symlink() or not source.is_file():raise ValueError()

@@ -6,7 +6,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Developer build failed' }
 python verify_development.py dist/BakuriDevelopment/BakuriDevelopment.exe
 if ($LASTEXITCODE -ne 0) { throw 'Developer startup verification failed' }
 New-Item -ItemType Directory -Force DevArtifacts | Out-Null
-Compress-Archive -Path dist/BakuriDevelopment -DestinationPath DevArtifacts/Bakuri-Development-0.15.0-dev.3.zip -Force
+Compress-Archive -Path dist/BakuriDevelopment -DestinationPath DevArtifacts/Bakuri-Development-0.15.0-dev.4.zip -Force
 python prepare_source.py
 if ($LASTEXITCODE -ne 0) { throw 'Source packaging failed' }
 Copy-Item SourcePackages/*.zip DevArtifacts/

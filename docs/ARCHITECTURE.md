@@ -38,3 +38,5 @@ Existing `image_inputs.py`, `hancom_images.py`, `pdf_pages.py`, `hancom_merge.py
 ## Validation and limits
 
 Full unittest discovery is required on Windows CI, native popup timer/focus checks, then PyInstaller developer build and native packaged-window startup. Source ZIPs include `bakuri/`, tools, guides and developer requirements; no caches/build products. Real Office/Hancom automation still needs a PC with those applications. This change does not promise fewer V3 alerts or faster conversion: the engines and packaging method are unchanged.
+
+PDF page splitting uses `domain/pdf_selection.py` for pure 1-based input validation, `PdfPagesRequest` for the immutable worker boundary, `conversion/pdf_split.py` for native PDF page copying, and the shared `ui/pdf_split.py` dialog. It reuses JobControl, cancellation, collision-safe publication and completion reports. No raster rendering is used for splitting.

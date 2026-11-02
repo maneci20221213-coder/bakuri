@@ -117,11 +117,12 @@ class ResultsPresenter:
             else "작업 실패 · " + saved if outcome == "failed" else saved
         )
         if result.get("kind") == "compress":
-            skipped = sum(
-                row["status"] in ("건너뜀", "축소 효과 없음") for row in window.compression_rows
-            )
+            skipped = sum(row["status"] == "건너뜀" for row in window.compression_rows)
+            unchanged = sum(row["status"] == "축소 효과 없음" for row in window.compression_rows)
             failed = sum(row["status"] == "실패" for row in window.compression_rows)
-            summary += f" · 건너뜀 {skipped}개 · 실패 {failed}개"
+            summary += f" · 축소 효과 없음 {unchanged}개 · 건너뜀 {skipped}개 · 실패 {failed}개"
+            if len(window.compression_rows) == 1 and not paths:
+                summary += "\n" + window.compression_rows[0]["detail"]
             from tray_results import compression_savings
 
             savings = compression_savings(window.compression_rows)

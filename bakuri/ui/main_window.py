@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
     QFileDialog,
+    QDialog,
     QLineEdit,
     QMenu,
     QMessageBox,
@@ -31,7 +32,7 @@ from .settings_store import initialize_settings
 from .results import ResultsPresenter
 from bakuri.application.runner import run_job
 from bakuri.application.settings import conversion_options, compression_options
-from bakuri.domain.models import ConversionRequest, CompressionRequest
+from bakuri.domain.models import ConversionRequest, CompressionRequest, PdfPagesRequest
 
 
 class Window(QWidget):
@@ -183,6 +184,13 @@ class Window(QWidget):
 
     def output_changed(self, format):
         paths = self.files.checked_paths()
+        single_pdf = (
+            format.lower() == "pdf" and len(paths) == 1 and Path(paths[0]).suffix.lower() == ".pdf"
+        )
+        self.pdf_pages.setVisible(single_pdf)
+        self.pdf_pages.setEnabled(single_pdf and not self.busy)
+        self.merge.setVisible(not single_pdf)
+        self.individual.setText("전체 저장" if single_pdf else "각각 저장")
         allowed = can_merge(paths, format)
         self.merge.setEnabled(allowed and not self.busy)
         self.compression_profile.setVisible(format == "용량 축소")
@@ -241,6 +249,8 @@ class Window(QWidget):
             return
         if key == "hwp_merge":
             self.start_conversion(self.quick_paths, "hwpx", True, self.popup.geometry().center())
+        elif key == "pdf_split":
+            self.start_pdf_pages(self.quick_paths)
         elif key == "pdf_merge":
             if len(self.quick_paths) < 2:
                 QMessageBox.information(self, "PDF 합치기", "PDF 파일을 두 개 이상 선택해 주세요.")
@@ -311,6 +321,25 @@ class Window(QWidget):
         )
         self.begin_job(request, "convert", anchor)
 
+    def start_pdf_pages(self, paths):
+        if self.busy or self.updater.installing:
+            return
+        if len(paths) != 1 or Path(paths[0]).suffix.lower() != ".pdf":
+            return
+        from bakuri.conversion.pdf_split import pdf_page_count
+        from .pdf_split import PdfSplitDialog
+
+        self.popup.hide()
+        try:
+            count = pdf_page_count(paths[0])
+        except Exception as error:
+            QMessageBox.information(self, "PDF 확인", friendly_error(error, "conversion"))
+            return
+        dialog = PdfSplitDialog(paths[0], count, self)
+        if dialog.exec() == QDialog.Accepted:
+            request = PdfPagesRequest(self.files.inputs_for(paths)[0], **dialog.options())
+            self.begin_job(request, "convert")
+
     def start_compression(self, paths, anchor=None):
         if self.busy:
             return
@@ -347,6 +376,7 @@ class Window(QWidget):
         self.compression_profile.setEnabled(False)
         self.individual.setEnabled(False)
         self.merge.setEnabled(False)
+        self.pdf_pages.setEnabled(False)
         self.status.setText("0% · 작업 준비")
         self.tray_stop_action.setEnabled(True)
         self.tray.setToolTip(

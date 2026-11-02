@@ -4,7 +4,7 @@ Set-Location $PSScriptRoot
 if ($RepositoryUrl -notmatch '^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/?$') { throw 'Use a public GitHub repository URL.' }
 $RepositoryUrl=$RepositoryUrl.TrimEnd('/')
 $Version=[regex]::Match((Get-Content 'version.py' -Raw),'VERSION\s*=\s*"([^"]+)"').Groups[1].Value
-if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid app version.' }
+if ($Version -notmatch '^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$') { throw 'Invalid app version.' }
 function RunChecked([scriptblock]$Command) { & $Command; if ($LASTEXITCODE -ne 0) { throw "Command failed: $Command" } }
 if (-not (Test-Path '.release-venv\Scripts\python.exe')) { RunChecked { py -3.12 -m venv .release-venv } }
 $Python=Join-Path $PSScriptRoot '.release-venv\Scripts\python.exe'

@@ -18,7 +18,7 @@ class PublicReleaseManager:
         for asset in assets:
             version=asset.get('Version','');name=asset.get('FileName','')
             if (asset.get('PackageId')!='Bakuri.FileConverter' or asset.get('Type')!='Full'
-                or not re.fullmatch(r'\d+\.\d+\.\d+',version)
+                or not re.fullmatch(r'\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?',version)
                 or name!='Bakuri.FileConverter-'+version+'-stable-full.nupkg'
                 or type(asset.get('Size')) is not int or not 0<asset['Size']<=1024**3
                 or not re.fullmatch(r'[0-9A-Fa-f]{64}',asset.get('SHA256',''))):

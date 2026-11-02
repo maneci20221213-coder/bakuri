@@ -89,6 +89,15 @@ class CompressionRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class PdfPagesRequest:
+    file: InputFile
+    mode: str = "interval"
+    every: int = 1
+    selection: str = ""
+    separate: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class CompressionRow:
     source: str
     before: int

@@ -41,3 +41,10 @@ class PublicSourceTests(unittest.TestCase):
   for url in ['http://github.com/file','https://github.com.evil.example/file','https://github.com@evil.example/file','https://github.com:8080/file','https://evil.example/file']:
    with self.assertRaises(ValueError):validate_url(url)
   validate_url('https://release-assets.githubusercontent.com/file')
+
+ def test_prerelease_asset_passes_validation_and_pins_exact_tag(self):
+  self.asset['Version']='1.0.0-beta.1'
+  self.asset['FileName']='Bakuri.FileConverter-1.0.0-beta.1-stable-full.nupkg'
+  self.info.TargetFullRelease=types.SimpleNamespace(**self.asset)
+  manager=self.manager();manager.check_for_updates();manager.download_updates(self.info)
+  self.assertIn('/releases/download/v1.0.0-beta.1/',self.calls[-1])

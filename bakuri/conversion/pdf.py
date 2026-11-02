@@ -8,10 +8,46 @@ from bakuri.domain.formats import IMAGES
 from .office import office
 
 
+def jpeg_pdf(src, dest, control=None):
+    """Embed the original JPEG stream; express EXIF orientation in PDF geometry."""
+    with Image.open(src) as image:
+        if image.format not in {"JPEG", "MPO"}:
+            return False
+        width, height = image.size
+        orientation = image.getexif().get(274, 1)
+    if orientation in {5, 6, 7, 8}:
+        width, height = height, width
+    width, height = width * 72 / 150, height * 72 / 150
+    if control:
+        control.check()
+    with fitz.open() as document:
+        page = document.new_page(width=width, height=height)
+        page.insert_image(page.rect, filename=str(src), keep_proportion=False)
+        matrices = {
+            2: (-width, 0, 0, height, width, 0),
+            3: (-width, 0, 0, -height, width, height),
+            4: (width, 0, 0, -height, 0, height),
+            5: (0, -height, -width, 0, width, height),
+            6: (0, -height, width, 0, 0, height),
+            7: (0, height, width, 0, 0, 0),
+            8: (0, height, -width, 0, width, 0),
+        }
+        if orientation in matrices:
+            matrix = " ".join(str(value) for value in matrices[orientation])
+            name = page.get_images()[0][7]
+            document.update_stream(page.get_contents()[0], f"q {matrix} cm /{name} Do Q".encode())
+        if control:
+            control.check()
+        document.save(dest, garbage=4, deflate=True)
+    return True
+
+
 def to_pdf(src, dest, session=None, control=None, advance=lambda f: None):
     ext = src.suffix.lower()
     if ext == ".pdf":
         shutil.copyfile(src, dest)
+    elif ext in {".jpg", ".jpeg"} and jpeg_pdf(src, dest, control):
+        advance(0.8)
     elif ext in IMAGES:
         with fitz.open() as document:
             for index, image in enumerate(frames(src)):

@@ -5,18 +5,30 @@ from .control import JobControl, Cancelled
 from bakuri.domain.models import (
     ConversionRequest,
     CompressionRequest,
+    PdfPagesRequest,
     CompressionRow,
     JobKind,
     JobOutcome,
     JobReport,
 )
 
-Request = ConversionRequest | CompressionRequest
+Request = ConversionRequest | CompressionRequest | PdfPagesRequest
 Operation = Callable[[JobControl], object]
 
 
 def execute(request: Request, control: JobControl):
     """Lazy imports keep engine libraries out of capability checks and UI setup."""
+    if isinstance(request, PdfPagesRequest):
+        from bakuri.conversion.pdf_split import split_pdf
+
+        return split_pdf(
+            request.file.path,
+            request.mode,
+            request.every,
+            request.selection,
+            request.separate,
+            control,
+        )
     paths = tuple(item.path for item in request.files)
     if isinstance(request, ConversionRequest):
         from bakuri.conversion.service import convert

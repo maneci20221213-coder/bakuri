@@ -2,6 +2,7 @@
 import os,subprocess,sys,time
 from pathlib import Path
 import win32gui,win32process
+from build_channel import BUILD_LABEL
 exe=Path(sys.argv[1]).resolve();env=dict(os.environ,QT_QPA_PLATFORM='windows')
 process=subprocess.Popen([str(exe)],env=env)
 try:
@@ -13,7 +14,7 @@ try:
    if win32process.GetWindowThreadProcessId(hwnd)[1]==process.pid and win32gui.IsWindowVisible(hwnd):
     found.append(win32gui.GetWindowText(hwnd))
   win32gui.EnumWindows(visit,None)
-  if any('개발용' in text and '0.15.0' in text for text in found):break
+  if any(BUILD_LABEL in text for text in found):break
   time.sleep(.2)
  else:raise RuntimeError('Developer window was not found')
  print('Packaged developer window startup verification passed.')

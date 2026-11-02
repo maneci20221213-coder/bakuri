@@ -169,8 +169,8 @@ class QuickPopup(QWidget):
             labels["png"] = (target.upper(), target)
             labels["jpeg"] = ("한글", "hwpx")
         elif pdfs:
-            self.actions = {"pdf": "pdf_merge", "jpeg": "hwpx"}
-            labels["pdf"] = ("PDF 합치기", "pdf")
+            self.actions = {"pdf": "pdf_split" if len(paths) == 1 else "pdf_merge", "jpeg": "hwpx"}
+            labels["pdf"] = ("페이지 나누기" if len(paths) == 1 else "PDF 합치기", "pdf")
             labels["jpeg"] = ("한글", "hwpx")
         elif extensions and extensions <= HANCOM and len(paths) > 1:
             self.actions = {"pdf": "hwp_merge"}
@@ -182,7 +182,9 @@ class QuickPopup(QWidget):
             button.layout().itemAt(1).widget().setText(label)
         self.buttons["pdf"].setEnabled(True)
         self.buttons["pdf"].setToolTip(
-            "PDF 파일을 두 개 이상 선택해 주세요." if pdfs and len(paths) < 2 else ""
+            "일정 페이지마다 나누거나 원하는 페이지를 추출합니다."
+            if pdfs and len(paths) == 1
+            else ""
         )
         self.buttons["hwpx"].setVisible(
             bool(paths) and all(Path(p).suffix.lower() == ".hwp" for p in paths)

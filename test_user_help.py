@@ -28,7 +28,7 @@ class HelpTests(unittest.TestCase):
   from app import SettingsDialog
   w=Window();dialog=HelpDialog(w)
   self.assertEqual([dialog.tabs.tabText(i) for i in range(dialog.tabs.count())],['파일 형식 변환','파일명 변경','패치노트'])
-  self.assertIn('0.15.0',dialog.notes.toPlainText())
+  self.assertIn(__import__('version').VERSION,dialog.notes.toPlainText())
   dialog.tabs.setCurrentIndex(2);self.assertEqual(dialog.tabs.currentWidget(),dialog.notes)
   self.assertNotIn('단축키 다시 연결',[a.text() for a in w.tray.contextMenu().actions()])
   settings=SettingsDialog(w)

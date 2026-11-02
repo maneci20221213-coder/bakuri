@@ -11,6 +11,10 @@ ROUTES = {
         "bakuri/domain/models.py",
         "bakuri/application/runner.py",
         "bakuri/conversion/service.py",
+        "bakuri/conversion/multi_image.py",
+        "bakuri/ui/multi_image.py",
+        "test_multi_image.py",
+        "test_multi_image_ui.py",
     ),
     "pdf": (
         "bakuri/conversion/pdf.py",

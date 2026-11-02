@@ -306,6 +306,16 @@ class Window(QWidget):
         merge = self.merge.isChecked() and self.merge.isEnabled()
         self.start_conversion(paths, fmt, merge)
 
+    def multi_image_choices(self, files):
+        from .multi_image import choose_multi_images
+
+        self.popup.hide()
+        try:
+            return choose_multi_images(files, self)
+        except Exception as error:
+            QMessageBox.information(self, "이미지 확인", friendly_error(error, "conversion"))
+            return None
+
     def start_conversion(self, paths, fmt, merge, anchor=None):
         if self.busy:
             return
@@ -316,9 +326,11 @@ class Window(QWidget):
                 "선택한 파일에는 이 출력 형식을 사용할 수 없습니다. 파일의 체크 표시를 확인하고, 선택 가능한 다른 형식을 골라 주세요. 자세한 내용은 ? 버튼의 사용 설명에서 확인할 수 있습니다.",
             )
             return
-        request = ConversionRequest(
-            self.files.inputs_for(paths), fmt, merge, conversion_options(self.settings)
-        )
+        files = self.files.inputs_for(paths)
+        choices = self.multi_image_choices(files)
+        if choices is None:
+            return
+        request = ConversionRequest(files, fmt, merge, conversion_options(self.settings), choices)
         self.begin_job(request, "convert", anchor)
 
     def start_pdf_pages(self, paths):
@@ -350,9 +362,11 @@ class Window(QWidget):
         self.compression_profile.setCurrentIndex(
             self.compression_profile.findData(options["profile"])
         )
-        request = CompressionRequest(
-            self.files.inputs_for(paths), compression_options(self.settings)
-        )
+        files = self.files.inputs_for(paths)
+        choices = self.multi_image_choices(files)
+        if choices is None:
+            return
+        request = CompressionRequest(files, compression_options(self.settings), choices)
         self.begin_job(request, "compress", anchor)
 
     def begin_job(self, operation, kind, anchor=None):

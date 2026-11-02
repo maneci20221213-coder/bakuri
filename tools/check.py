@@ -15,6 +15,7 @@ GROUPS = {
         "test_pdf_pages",
         "test_pdf_split",
         "test_jpeg_regressions",
+        "test_multi_image",
         "test_recent_engine",
         "test_merge_documents",
         "test_spreadsheets",
@@ -25,6 +26,7 @@ GROUPS = {
     "window": [
         "test_ui",
         "test_pdf_split_ui",
+        "test_multi_image_ui",
         "test_development6",
         "test_user_help",
         "test_refactor",

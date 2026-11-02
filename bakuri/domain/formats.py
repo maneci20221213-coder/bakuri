@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-IMAGES = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".webp", ".ico"}
+IMAGES = {".png", ".jpg", ".jpeg", ".mpo", ".bmp", ".gif", ".tif", ".tiff", ".webp", ".ico"}
 HANCOM = {".hwp", ".hwpx"}
 SPREADSHEETS = {
     ".xls",

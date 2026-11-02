@@ -29,6 +29,11 @@ def execute(request: Request, control: JobControl):
             request.separate,
             control,
         )
+    from bakuri.conversion.multi_image import resolve_selections, process_selected_images
+
+    selections = resolve_selections(request.files, request.multi_images)
+    if selections:
+        return process_selected_images(request, selections, control)
     paths = tuple(item.path for item in request.files)
     if isinstance(request, ConversionRequest):
         from bakuri.conversion.service import convert
@@ -73,4 +78,5 @@ def run_job(
         tuple(control.outputs),
         tuple(CompressionRow(**row) for row in control.rows),
         error,
+        tuple(control.notes),
     )

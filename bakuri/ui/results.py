@@ -101,6 +101,7 @@ class ResultsPresenter:
                 outcome=result.outcome.value,
                 error=result.error,
                 kind=result.kind.value,
+                notes=list(result.notes),
             )
         if isinstance(result, list):
             result = dict(paths=result, rows=[], outcome="done", error="", kind="convert")
@@ -128,6 +129,8 @@ class ResultsPresenter:
             savings = compression_savings(window.compression_rows)
             if savings:
                 summary += "\n" + savings
+        if result.get("notes"):
+            summary += "\n" + "\n".join(result["notes"])
         links = []
         if paths:
             links.append(

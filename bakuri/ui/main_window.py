@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
     QFileDialog,
+    QDialog,
     QLineEdit,
     QMenu,
     QMessageBox,
@@ -31,7 +32,7 @@ from .settings_store import initialize_settings
 from .results import ResultsPresenter
 from bakuri.application.runner import run_job
 from bakuri.application.settings import conversion_options, compression_options
-from bakuri.domain.models import ConversionRequest, CompressionRequest
+from bakuri.domain.models import ConversionRequest, CompressionRequest, PdfPagesRequest
 
 
 class Window(QWidget):
@@ -183,6 +184,13 @@ class Window(QWidget):
 
     def output_changed(self, format):
         paths = self.files.checked_paths()
+        single_pdf = (
+            format.lower() == "pdf" and len(paths) == 1 and Path(paths[0]).suffix.lower() == ".pdf"
+        )
+        self.pdf_pages.setVisible(single_pdf)
+        self.pdf_pages.setEnabled(single_pdf and not self.busy)
+        self.merge.setVisible(not single_pdf)
+        self.individual.setText("전체 저장" if single_pdf else "각각 저장")
         allowed = can_merge(paths, format)
         self.merge.setEnabled(allowed and not self.busy)
         self.compression_profile.setVisible(format == "용량 축소")
@@ -241,6 +249,8 @@ class Window(QWidget):
             return
         if key == "hwp_merge":
             self.start_conversion(self.quick_paths, "hwpx", True, self.popup.geometry().center())
+        elif key == "pdf_split":
+            self.start_pdf_pages(self.quick_paths)
         elif key == "pdf_merge":
             if len(self.quick_paths) < 2:
                 QMessageBox.information(self, "PDF 합치기", "PDF 파일을 두 개 이상 선택해 주세요.")
@@ -296,6 +306,16 @@ class Window(QWidget):
         merge = self.merge.isChecked() and self.merge.isEnabled()
         self.start_conversion(paths, fmt, merge)
 
+    def multi_image_choices(self, files):
+        from .multi_image import choose_multi_images
+
+        self.popup.hide()
+        try:
+            return choose_multi_images(files, self)
+        except Exception as error:
+            QMessageBox.information(self, "이미지 확인", friendly_error(error, "conversion"))
+            return None
+
     def start_conversion(self, paths, fmt, merge, anchor=None):
         if self.busy:
             return
@@ -306,10 +326,31 @@ class Window(QWidget):
                 "선택한 파일에는 이 출력 형식을 사용할 수 없습니다. 파일의 체크 표시를 확인하고, 선택 가능한 다른 형식을 골라 주세요. 자세한 내용은 ? 버튼의 사용 설명에서 확인할 수 있습니다.",
             )
             return
-        request = ConversionRequest(
-            self.files.inputs_for(paths), fmt, merge, conversion_options(self.settings)
-        )
+        files = self.files.inputs_for(paths)
+        choices = self.multi_image_choices(files)
+        if choices is None:
+            return
+        request = ConversionRequest(files, fmt, merge, conversion_options(self.settings), choices)
         self.begin_job(request, "convert", anchor)
+
+    def start_pdf_pages(self, paths):
+        if self.busy or self.updater.installing:
+            return
+        if len(paths) != 1 or Path(paths[0]).suffix.lower() != ".pdf":
+            return
+        from bakuri.conversion.pdf_split import pdf_page_count
+        from .pdf_split import PdfSplitDialog
+
+        self.popup.hide()
+        try:
+            count = pdf_page_count(paths[0])
+        except Exception as error:
+            QMessageBox.information(self, "PDF 확인", friendly_error(error, "conversion"))
+            return
+        dialog = PdfSplitDialog(paths[0], count, self)
+        if dialog.exec() == QDialog.Accepted:
+            request = PdfPagesRequest(self.files.inputs_for(paths)[0], **dialog.options())
+            self.begin_job(request, "convert")
 
     def start_compression(self, paths, anchor=None):
         if self.busy:
@@ -321,9 +362,11 @@ class Window(QWidget):
         self.compression_profile.setCurrentIndex(
             self.compression_profile.findData(options["profile"])
         )
-        request = CompressionRequest(
-            self.files.inputs_for(paths), compression_options(self.settings)
-        )
+        files = self.files.inputs_for(paths)
+        choices = self.multi_image_choices(files)
+        if choices is None:
+            return
+        request = CompressionRequest(files, compression_options(self.settings), choices)
         self.begin_job(request, "compress", anchor)
 
     def begin_job(self, operation, kind, anchor=None):
@@ -347,6 +390,7 @@ class Window(QWidget):
         self.compression_profile.setEnabled(False)
         self.individual.setEnabled(False)
         self.merge.setEnabled(False)
+        self.pdf_pages.setEnabled(False)
         self.status.setText("0% · 작업 준비")
         self.tray_stop_action.setEnabled(True)
         self.tray.setToolTip(

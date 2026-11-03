@@ -1,7 +1,7 @@
 """Image encoding, metadata and TIFF preservation."""
 
 import io
-from PIL import Image, ImageOps, PngImagePlugin
+from PIL import Image, ImageOps, PngImagePlugin, JpegImagePlugin
 from .profiles import PROFILES, RATIO_PROFILES, TARGET_BYTES, SkipCompression
 
 
@@ -275,7 +275,11 @@ def compress_image_ratio(source, folder, ratio, protect_text, strip, check, tick
         return compress_tiff(source, target, strip, check, tick, effective)
     with Image.open(source) as original:
         if getattr(original, "n_frames", 1) > 1:
-            raise SkipCompression("애니메이션의 모든 프레임 보존을 위해 건너뜁니다.")
+            raise SkipCompression(
+                "여러 장의 사진·보조 이미지가 들어 있는 JPEG/MPO는 모두 보존하기 위해 건너뜁니다. 일반 JPEG 한 장으로 저장한 복사본을 사용해 주세요."
+                if original.format == "MPO"
+                else "애니메이션의 모든 프레임 보존을 위해 건너뜁니다."
+            )
         check()
         image = ImageOps.exif_transpose(original)
         image.load()
@@ -292,7 +296,24 @@ def compress_image_ratio(source, folder, ratio, protect_text, strip, check, tick
             if transparent or suffix in {".png", ".bmp", ".gif"}
             else "WEBP" if suffix == ".webp" else "JPEG"
         )
-        target.write_bytes(encoded(image, fmt, 95, strip))
+        if fmt == "JPEG" and original.format == "JPEG" and original.quantization:
+            # Keep the source quantizers/chroma sampling instead of inflating a
+            # quality-60/75 photo into quality-95, 4:4:4 after resizing it.
+            options = metadata(image, strip)
+            options.pop("pnginfo", None)
+            data = io.BytesIO()
+            image.save(
+                data,
+                "JPEG",
+                qtables=original.quantization,
+                subsampling=max(0, JpegImagePlugin.get_sampling(original)),
+                optimize=True,
+                progressive=True,
+                **options,
+            )
+            target.write_bytes(data.getvalue())
+        else:
+            target.write_bytes(encoded(image, fmt, 95, strip))
         check()
         tick(0.9)
         with Image.open(target) as verify:

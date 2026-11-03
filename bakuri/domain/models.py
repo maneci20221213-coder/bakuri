@@ -68,14 +68,32 @@ class CompressionOptions:
 
 
 @dataclass(frozen=True, slots=True)
+class MultiImageSelection:
+    path: str
+    count: int
+    primary: int
+    mode: str = "primary"
+    auxiliary: bool = False
+    fingerprint: tuple[int, int] = ()
+
+    def __post_init__(self):
+        object.__setattr__(self, "path", str(Path(self.path).absolute()))
+        object.__setattr__(self, "fingerprint", tuple(self.fingerprint))
+        if self.mode not in {"primary", "all"} or not 0 <= self.primary < self.count:
+            raise ValueError("이미지 처리 범위를 다시 선택해 주세요.")
+
+
+@dataclass(frozen=True, slots=True)
 class ConversionRequest:
     files: tuple[InputFile, ...]
     output: OutputFormat
     merge: bool = False
     options: ConversionOptions = field(default_factory=ConversionOptions)
+    multi_images: tuple[MultiImageSelection, ...] = ()
 
     def __post_init__(self):
         object.__setattr__(self, "files", tuple(self.files))
+        object.__setattr__(self, "multi_images", tuple(self.multi_images))
         object.__setattr__(self, "output", OutputFormat.parse(self.output))
 
 
@@ -83,9 +101,20 @@ class ConversionRequest:
 class CompressionRequest:
     files: tuple[InputFile, ...]
     options: CompressionOptions = field(default_factory=CompressionOptions)
+    multi_images: tuple[MultiImageSelection, ...] = ()
 
     def __post_init__(self):
         object.__setattr__(self, "files", tuple(self.files))
+        object.__setattr__(self, "multi_images", tuple(self.multi_images))
+
+
+@dataclass(frozen=True, slots=True)
+class PdfPagesRequest:
+    file: InputFile
+    mode: str = "interval"
+    every: int = 1
+    selection: str = ""
+    separate: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,6 +137,7 @@ class JobReport:
     paths: tuple[str, ...] = ()
     rows: tuple[CompressionRow, ...] = ()
     error: str = ""
+    notes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

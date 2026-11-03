@@ -72,7 +72,7 @@ class LatestPopupTests(unittest.TestCase):
  def test_button_click_still_converts(self):
   from PySide6.QtTest import QTest
   popup=QuickPopup();chosen=[];popup.chosen.connect(chosen.append);popup.present(['a.pdf']);app.processEvents()
-  QTest.mouseClick(popup.buttons['pdf'],Qt.LeftButton);self.assertEqual(chosen,['pdf_merge'])
+  QTest.mouseClick(popup.buttons['pdf'],Qt.LeftButton);self.assertEqual(chosen,['pdf_split'])
  def test_escape_without_focus(self):
   from unittest.mock import patch
   import types,sys

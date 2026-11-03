@@ -1,10 +1,17 @@
 name: Windows installer and GitHub Release
 on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/release.yml']
   workflow_dispatch:
     inputs:
       publish:
         description: Publish immediately (false creates an unpublished draft)
         required: true
+        type: boolean
+        default: false
+      refresh_existing:
+        description: Replace the published assets for this same version
         type: boolean
         default: false
 permissions:
@@ -14,7 +21,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Refresh published Bakuri 1.0.0')
     runs-on: windows-2022
     timeout-minutes: 40
     permissions:
@@ -48,6 +55,10 @@ jobs:
         run: |
           python -m unittest discover -v
           if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
+          python verify_multi_image.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native MPO choice verification failed' }
+          python verify_pdf_split.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native PDF split verification failed' }
           python verify_completion_ui.py
           if ($LASTEXITCODE -ne 0) { throw 'Native completion/layout verification failed' }
           python -c "import subprocess,sys; subprocess.run([sys.executable,'verify_reorder.py'],check=True,timeout=25)"
@@ -66,14 +77,50 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BAKURI_VERSION: ${{ steps.app.outputs.version }}
-          BAKURI_PUBLISH: ${{ inputs.publish }}
+          BAKURI_PUBLISH: ${{ inputs.publish || github.event_name == 'push' }}
+          BAKURI_REFRESH: ${{ inputs.refresh_existing || github.event_name == 'push' }}
         run: |
           $Tag="v$env:BAKURI_VERSION"
           $PreRelease=$env:BAKURI_VERSION.Contains('-')
           $Files=@(Get-ChildItem Releases -File | ForEach-Object FullName)
           $Existing=& gh release view $Tag --repo $env:GITHUB_REPOSITORY --json isDraft 2>$null
           if ($LASTEXITCODE -eq 0) {
-            if (-not ($Existing | ConvertFrom-Json).isDraft) { throw 'A published version is immutable. Bump version.py.' }
+            $Release=$Existing | ConvertFrom-Json
+            if (-not $Release.isDraft) {
+              if ($env:BAKURI_REFRESH -ne 'true' -or $env:BAKURI_PUBLISH -ne 'true') {
+                throw 'Replacing published assets requires explicit refresh and publish inputs and a mutable release.'
+              }
+              $Published=gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$Tag"
+              if ($LASTEXITCODE -ne 0 -or ($Published | ConvertFrom-Json).immutable) { throw 'The existing release must be mutable.' }
+              $PreviousTag=git rev-parse "refs/tags/$Tag"
+              if ($LASTEXITCODE -ne 0) { throw 'Missing existing tag.' }
+              if ($env:GITHUB_EVENT_NAME -eq 'push' -and ($Tag -ne 'v1.0.0' -or $PreviousTag -ne 'f7ae1ec63d2b307eb0e2109c1e0755dcbdb72f19')) {
+                throw 'This one-time refresh expects the original v1.0.0 tag.'
+              }
+              $Backup=Join-Path $env:RUNNER_TEMP 'previous-release-assets'
+              gh release download $Tag --repo $env:GITHUB_REPOSITORY --dir $Backup
+              if ($LASTEXITCODE -ne 0) { throw 'Could not back up existing assets.' }
+              $PreviousFiles=@(Get-ChildItem $Backup -File | ForEach-Object FullName)
+              if (Compare-Object @($PreviousFiles | ForEach-Object { [IO.Path]::GetFileName($_) }) @($Files | ForEach-Object { [IO.Path]::GetFileName($_) })) { throw 'Unexpected existing asset set.' }
+              try {
+                $Feed=@($Files | Where-Object { [IO.Path]::GetFileName($_) -eq 'releases.stable.json' })
+                $Payload=@($Files | Where-Object { $_ -notin $Feed })
+                gh release upload $Tag --repo $env:GITHUB_REPOSITORY --clobber @Payload
+                if ($LASTEXITCODE -ne 0) { throw 'Release payload upload failed.' }
+                gh release upload $Tag --repo $env:GITHUB_REPOSITORY --clobber @Feed
+                if ($LASTEXITCODE -ne 0) { throw 'Update feed upload failed.' }
+                git push origin "${env:GITHUB_SHA}:refs/tags/$Tag" "--force-with-lease=refs/tags/${Tag}:$PreviousTag"
+                if ($LASTEXITCODE -ne 0) { throw 'Release tag update failed.' }
+                gh release edit $Tag --repo $env:GITHUB_REPOSITORY --notes-file RELEASE-NOTES.md
+                if ($LASTEXITCODE -ne 0) { throw 'Release notes update failed.' }
+              } catch {
+                gh release upload $Tag --repo $env:GITHUB_REPOSITORY --clobber @PreviousFiles
+                if ($LASTEXITCODE -ne 0) { Write-Warning 'Asset rollback failed.' }
+                git push origin "${PreviousTag}:refs/tags/$Tag" "--force-with-lease=refs/tags/${Tag}:$env:GITHUB_SHA"
+                throw
+              }
+              exit 0
+            }
             & gh release upload $Tag --repo $env:GITHUB_REPOSITORY --clobber @Files
             if ($LASTEXITCODE -ne 0) { throw 'Draft asset upload failed.' }
             $Edit=@('release','edit',$Tag,'--repo',$env:GITHUB_REPOSITORY,'--target',$env:GITHUB_SHA,'--title',"바꾸리 $env:BAKURI_VERSION",'--notes-file','RELEASE-NOTES.md')
@@ -82,6 +129,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Draft release update failed.' }
             exit 0
           }
+          if ($env:GITHUB_EVENT_NAME -eq 'push') { throw 'The existing release was not found.' }
           $Arguments=@('release','create',$Tag,'--repo',$env:GITHUB_REPOSITORY,'--target',$env:GITHUB_SHA,'--title',"바꾸리 $env:BAKURI_VERSION",'--notes-file','RELEASE-NOTES.md')
           if ($PreRelease) { $Arguments+=@('--prerelease','--latest=false') } elseif ($env:BAKURI_PUBLISH -eq 'true') { $Arguments+='--latest' }
           if ($env:BAKURI_PUBLISH -ne 'true') { $Arguments+='--draft' }

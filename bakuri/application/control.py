@@ -15,6 +15,7 @@ class JobControl:
         self.percent = 0
         self.outputs = []
         self.rows = []
+        self.notes = []
 
     def cancel(self):
         self.cancelled.set()

@@ -72,6 +72,17 @@ class GithubDistributionTests(unittest.TestCase):
 class UpdateEntryTests(unittest.TestCase):
  setUp=UpdateTests.setUp
  tearDown=UpdateTests.tearDown
+ def test_tray_reopen_checks_again_inside_startup_cooldown(self):
+  factory=Mock()
+  factory.return_value.check_for_updates.return_value=None
+  self.updater.factory=factory
+  with patch('updater.feed_url',return_value='https://github.com/example/bakuri'),patch('updater.time.monotonic',side_effect=[100,101]):
+   self.updater.request('direct')
+   self.updater.worker.join(2);APP.processEvents()
+   self.window.hide();self.window.show()
+   self.updater.request('tray')
+   self.updater.worker.join(2);APP.processEvents()
+  self.assertEqual(factory.call_count,2)
  def test_tray_entry_checks_but_failure_keeps_current_status_without_dialog(self):
   self.window.status.setText('기존 변환 결과')
   factory=Mock(side_effect=ConnectionError('offline'))

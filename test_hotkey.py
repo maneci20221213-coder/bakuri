@@ -1,6 +1,6 @@
 import unittest,types,sys,ctypes,importlib.util,tempfile,os
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 class HotkeyTests(unittest.TestCase):
  def test_repeated_keys_and_exception_recovery(self):
@@ -74,3 +74,39 @@ class ToggleHotkeyTests(unittest.TestCase):
    foreground[0]=999;previous=len(dismiss)
    watcher.filter_event(0x100,types.SimpleNamespace(vkCode=target));self.assertEqual(len(dismiss),previous)
    for handler in watcher.log.handlers[:]:handler.close();watcher.log.removeHandler(handler)
+
+
+class ExplorerSelectionOrderTests(unittest.TestCase):
+    def test_file_selection_uses_explorer_view_order(self):
+        native = types.SimpleNamespace(IID_IDataObject=object(), DVASPECT_CONTENT=1, TYMED_HGLOBAL=1)
+        view = Mock()
+        view.GetItemObject.return_value.GetData.return_value.data_handle = 42
+        window = Mock()
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            sys.modules,
+            {"winreg": types.ModuleType("winreg"), "pythoncom": native,
+             "win32con": types.SimpleNamespace(CF_HDROP=15)},
+        ):
+            spec = importlib.util.spec_from_file_location(
+                "selection_order_test_module", Path(__file__).with_name("windows.py")
+            )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            folder = Path(directory) / "folder"
+            folder.mkdir()
+            first, last = str(Path(directory) / "3.pdf"), str(Path(directory) / "1.pdf")
+            window.Document.SelectedItems.return_value = [
+                types.SimpleNamespace(Path=last, IsFolder=False),
+                types.SimpleNamespace(Path=first, IsFolder=False),
+            ]
+            with (
+                patch.object(module, "shell_browser", return_value=Mock(
+                    QueryActiveShellView=Mock(return_value=view))),
+                patch.object(module, "drop_paths", return_value=[first, str(folder), last]) as read,
+            ):
+                self.assertEqual(module.selected_file_paths(window), [first, last])
+                view.GetItemObject.assert_called_once_with(-2147483647, native.IID_IDataObject)
+                read.assert_called_once_with(42)
+                window.Document.SelectedItems.assert_not_called()
+                view.GetItemObject.side_effect = RuntimeError("view order unavailable")
+                self.assertEqual(module.selected_file_paths(window), [last, first])

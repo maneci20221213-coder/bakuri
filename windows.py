@@ -96,13 +96,13 @@ class SelectionWatcher(threading.Thread):
                 try:
                     if (int(window.HWND)&0xffffffff)!=(hwnd&0xffffffff): continue
                     if tab and browser_hwnd(window) not in (0,hwnd,tab): continue
-                    paths=[item.Path for item in window.Document.SelectedItems() if not item.IsFolder]
+                    paths=selected_file_paths(window)
                     if paths: break
                 except Exception: continue
             if not paths and win32gui.GetClassName(hwnd) in ('Progman','WorkerW'):
                 desktop=shell.Windows().FindWindowSW(0,0,8,0,1)
                 if isinstance(desktop,tuple): desktop=win32com.client.Dispatch(next(v for v in desktop if not isinstance(v,(int,str,type(None)))))
-                paths=[item.Path for item in desktop.Document.SelectedItems() if not item.IsFolder]
+                paths=selected_file_paths(desktop)
             result.put((paths,None))
         except Exception as exc: result.put(([],str(exc)))
         finally: pythoncom.CoUninitialize()
@@ -144,14 +144,58 @@ def active_tab(hwnd):
     except Exception: pass
     return tabs[0] if tabs else 0
 
+def shell_browser(window):
+    import pythoncom
+    from win32com.shell import shell
+
+    service = window._oleobj_.QueryInterface(pythoncom.IID_IServiceProvider)
+    return service.QueryService(
+        pythoncom.MakeIID('{4C96BE40-915C-11CF-99D3-00AA004AE837}'), shell.IID_IShellBrowser
+    )
+
+
 def browser_hwnd(window):
     try:
+        return shell_browser(window).GetWindow()
+    except Exception:
+        return 0
+
+
+def drop_paths(handle):
+    from ctypes import wintypes
+
+    query = ctypes.windll.shell32.DragQueryFileW
+    query.argtypes = (wintypes.HANDLE, wintypes.UINT, wintypes.LPWSTR, wintypes.UINT)
+    query.restype = wintypes.UINT
+    paths = []
+    for index in range(query(handle, 0xFFFFFFFF, None, 0)):
+        size = query(handle, index, None, 0) + 1
+        name = ctypes.create_unicode_buffer(size)
+        if query(handle, index, name, size):
+            paths.append(name.value)
+    return paths
+
+
+def selected_file_paths(window):
+    try:
         import pythoncom
-        from win32com.shell import shell
-        service=window._oleobj_.QueryInterface(pythoncom.IID_IServiceProvider)
-        browser=service.QueryService(pythoncom.MakeIID('{4C96BE40-915C-11CF-99D3-00AA004AE837}'),shell.IID_IShellBrowser)
-        return browser.GetWindow()
-    except Exception: return 0
+        import win32con
+
+        view = shell_browser(window).QueryActiveShellView()
+        # SVGIO_SELECTION | SVGIO_FLAG_VIEWORDER; pywin32 takes a signed int.
+        flags = ctypes.c_int32(0x80000001).value
+        data = view.GetItemObject(flags, pythoncom.IID_IDataObject)
+        medium = data.GetData(
+            (win32con.CF_HDROP, None, pythoncom.DVASPECT_CONTENT, -1, pythoncom.TYMED_HGLOBAL)
+        )
+        paths = drop_paths(medium.data_handle)
+        if paths:
+            return [path for path in paths if not Path(path).is_dir()]
+    except Exception:
+        # Some Explorer views do not expose a file-drop selection through COM.
+        pass
+    return [item.Path for item in window.Document.SelectedItems() if not item.IsFolder]
+
 
 def source_active(hwnd,tab,popup):
     import win32gui

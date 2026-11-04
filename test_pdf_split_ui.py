@@ -72,11 +72,42 @@ class PdfSplitUiTests(unittest.TestCase):
         self.assertEqual(popup.actions["pdf"], "pdf_merge")
         self.assertEqual(popup.buttons["pdf"].accessibleName(), "PDF 합치기")
 
+    def test_office_popup_adds_split_without_replacing_conversion_buttons(self):
+        popup = QuickPopup()
+        self.addCleanup(popup.hide)
+        for path in ("sample.doc", "sample.docx"):
+            popup.present([path])
+            self.assertTrue(popup.buttons["pdf_split"].isVisible())
+            self.assertEqual(popup.buttons["pdf"].accessibleName(), "PDF")
+            self.assertEqual(popup.buttons["png"].accessibleName(), "PNG")
+        popup.present(self.paths)
+        self.assertFalse(popup.buttons["pdf_split"].isVisible())
+
+    def test_hancom_popup_routes_top_left_and_right_actions(self):
+        popup = QuickPopup(animate=False)
+        self.addCleanup(popup.hide)
+        actions = []
+        popup.chosen.connect(actions.append)
+        for path in ("sample.hwp", "sample.hwpx"):
+            for slot, label, action in (
+                ("pdf", "페이지 나누기", "pdf_split"),
+                ("png", "PDF 변환", "pdf"),
+                ("jpeg", "PNG 변환", "png"),
+            ):
+                popup.present([path])
+                self.assertFalse(popup.buttons["pdf_split"].isVisible())
+                self.assertEqual(popup.buttons[slot].accessibleName(), label)
+                popup.pick(slot)
+                self.assertEqual(actions[-1], action)
+
     def test_dialog_summary_and_invalid_ranges(self):
         dialog = PdfSplitDialog(self.paths[0], 10, self.w)
         dialog.every.setValue(3)
         self.assertIn("PDF 4개", dialog.summary.text())
-        dialog.mode.setCurrentIndex(1)
+        dialog.mode_buttons["boundaries"].setChecked(True)
+        dialog.boundaries.setText("4, 8")
+        self.assertIn("PDF 3개", dialog.summary.text())
+        dialog.mode_buttons["extract"].setChecked(True)
         self.assertFalse(dialog.buttons.button(QDialogButtonBox.Ok).isEnabled())
         dialog.selection.setText("8-10, 1-3, 5")
         self.assertIn("PDF 1개", dialog.summary.text())
@@ -93,7 +124,7 @@ class PdfSplitUiTests(unittest.TestCase):
         w.quick_paths = self.paths[:1]
 
         def configure(dialog):
-            dialog.mode.setCurrentIndex(1)
+            dialog.mode_buttons["extract"].setChecked(True)
             dialog.selection.setText("1-3, 5")
             return QDialog.Accepted
 
@@ -103,7 +134,9 @@ class PdfSplitUiTests(unittest.TestCase):
             self.assertIsInstance(request, PdfPagesRequest)
             self.assertEqual(request.selection, "1-3, 5")
             self.assertEqual(request.file.path, self.paths[0])
-            w.start_pdf_pages(self.paths[:1])
+            w.files.add_paths(self.paths[:1])
+            w.fmt.setCurrentText("페이지 나누기")
+            w.run.click()
             self.assertEqual(begin.call_count, 2)
         with (
             patch.object(PdfSplitDialog, "exec", return_value=QDialog.Rejected),

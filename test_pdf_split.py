@@ -3,6 +3,7 @@
 import tempfile
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 import fitz
 from bakuri.domain.pdf_selection import page_groups
 from bakuri.conversion.pdf_split import split_pdf, pdf_page_count
@@ -50,14 +51,20 @@ class PdfSplitTests(unittest.TestCase):
             doc.save(self.path)
         self.before = self.path.read_bytes()
 
-    def test_selection_validation_and_original_order(self):
+    def test_selection_validation_and_input_order(self):
         self.assertEqual(page_groups(7, every=3), ((0, 1, 2), (3, 4, 5), (6,)))
         self.assertEqual(
-            page_groups(10, "extract", selection="8-10, 1-3, 3, 5"), ((0, 1, 2, 4, 7, 8, 9),)
+            page_groups(10, "extract", selection="8-10, 1-3, 3, 5"), ((7, 8, 9, 0, 1, 2, 4),)
         )
         self.assertEqual(
-            page_groups(10, "extract", selection="5, 1-3", separate=True), ((0, 1, 2), (4,))
+            page_groups(10, "extract", selection="5, 1-3", separate=True), ((4,), (0, 1, 2))
         )
+        self.assertEqual(
+            page_groups(7, "boundaries", selection="6, 3"), ((0, 1), (2, 3, 4), (5, 6))
+        )
+        for text in ["", "1", "8", "2-3"]:
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                page_groups(7, "boundaries", selection=text)
         for text in ["", "0", "8", "3-1", "1,,2", "1;2", "bad"]:
             with self.subTest(text=text), self.assertRaises(ValueError):
                 page_groups(7, "extract", selection=text)
@@ -95,10 +102,10 @@ class PdfSplitTests(unittest.TestCase):
     def test_disjoint_extraction_remaps_links_and_bookmarks(self):
         paths = split_pdf(self.path, "extract", selection="5, 1, 7")
         with fitz.open(paths[0]) as doc:
-            self.assertEqual([p.get_text().strip() for p in doc], ["Page 1", "Page 5", "Page 7"])
-            self.assertEqual(doc[0].get_links()[0]["page"], 1)
-            self.assertEqual(doc[1].get_links()[0]["uri"], "https://example.org")
-            self.assertEqual(doc.get_toc(), [[1, "First", 1], [2, "Fifth", 2], [1, "Last", 3]])
+            self.assertEqual([p.get_text().strip() for p in doc], ["Page 5", "Page 1", "Page 7"])
+            self.assertEqual(doc[1].get_links()[0]["page"], 0)
+            self.assertEqual(doc[0].get_links()[0]["uri"], "https://example.org")
+            self.assertEqual(doc.get_toc(), [[1, "First", 2], [2, "Fifth", 1], [1, "Last", 3]])
         paths = split_pdf(self.path, "extract", selection="1, 5", separate=True)
         with fitz.open(paths[0]) as doc:
             self.assertEqual(doc[0].get_links(), [])
@@ -126,6 +133,55 @@ class PdfSplitTests(unittest.TestCase):
         self.assertFalse(list(self.path.parent.glob("*004*")))
         with self.assertRaises(Cancelled):
             split_pdf(self.path, control=control)
+
+    def test_pdf_split_compacts_objects_without_changing_rendered_pages(self):
+        output = Path(split_pdf(self.path, every=5)[0])
+        previous = output.with_name("previous.pdf")
+        with fitz.open(output) as doc, fitz.open(self.path) as original:
+            doc.save(previous, garbage=4, deflate=True)
+            for index, page in enumerate(doc):
+                self.assertEqual(page.get_pixmap().samples, original[index].get_pixmap().samples)
+        self.assertLess(output.stat().st_size, previous.stat().st_size)
+
+    def test_office_split_uses_native_suffix_and_requested_order(self):
+        for suffix, adapter in (
+            (".hwp", "_HancomPages"),
+            (".hwpx", "_HancomPages"),
+            (".doc", "_WordPages"),
+            (".docx", "_WordPages"),
+        ):
+            source = self.path.with_name("office" + suffix)
+            source.write_bytes(b"original")
+
+            def save(original, dest, spans, control):
+                self.assertEqual(original.read_bytes(), b"original")
+                self.assertEqual(dest.suffix, suffix)
+                self.assertEqual(spans, [(30, 40), (10, 20)])
+                dest.write_bytes(b"editable result")
+
+            with (
+                patch("bakuri.conversion.office_split.OfficeSession") as session,
+                patch(f"bakuri.conversion.office_split.{adapter}") as editor,
+            ):
+                session.return_value.__enter__.return_value = session.return_value
+                editor.return_value.count.return_value = 7
+                editor.return_value.position.side_effect = lambda page, count: page * 10
+                editor.return_value.save.side_effect = save
+                report = run_job(
+                    PdfPagesRequest(InputFile(source), mode="extract", selection="4, 2"),
+                    JobControl(),
+                    "convert",
+                    lambda error, context: str(error),
+                )
+                session.return_value.export.assert_not_called()
+                editor.return_value.close.assert_called_once()
+
+            self.assertEqual(report.outcome, "done", report.error)
+            output = Path(report.paths[0])
+            self.assertTrue(output.parent.samefile(source.parent))
+            self.assertEqual(output.name, "office_추출본" + suffix)
+            self.assertEqual(output.read_bytes(), b"editable result")
+            self.assertEqual(source.read_bytes(), b"original")
 
     def test_password_pdf_rejected_without_outputs(self):
         locked = self.path.with_name("locked.pdf")

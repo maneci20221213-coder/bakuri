@@ -1,4 +1,4 @@
-"""Small completion summaries; never emit progress/start toast notifications."""
+"""Format storage savings for compression results."""
 def size_text(value):return f'{value/1_000_000:.2f} MB' if value>=1_000_000 else f'{value/1000:.1f} KB'
 
 def compression_savings(rows):

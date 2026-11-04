@@ -34,7 +34,7 @@ with tempfile.TemporaryDirectory() as folder:
             try:
                 dialog = app.activeModalWidget()
                 assert isinstance(dialog, PdfSplitDialog)
-                dialog.mode.setCurrentIndex(1);dialog.selection.setText('9')
+                dialog.mode_buttons["extract"].setChecked(True);dialog.selection.setText('9')
                 assert not dialog.buttons.button(QDialogButtonBox.Ok).isEnabled()
                 dialog.selection.setText('1, 3-5')
                 assert '4페이지' in dialog.summary.text()
@@ -45,7 +45,8 @@ with tempfile.TemporaryDirectory() as folder:
                 if app.activeModalWidget():app.activeModalWidget().reject()
         with patch.object(w,'begin_job') as begin:
             QTimer.singleShot(50,configure)
-            QTest.mouseClick(w.pdf_pages,Qt.LeftButton)
+            w.fmt.setCurrentText("페이지 나누기")
+            QTest.mouseClick(w.run,Qt.LeftButton)
             assert not errors, errors
             request = begin.call_args.args[0]
         control = JobControl();execute(request,control)

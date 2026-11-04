@@ -3,5 +3,5 @@ from version import VERSION
 DEVELOPMENT=False
 SETTINGS_APP='FileConverter'
 SERVER_NAME='BakuriPythonTrial'
-BUILD_LABEL=f'{VERSION} (베타 1)'
+BUILD_LABEL=VERSION
 DEFAULT_HOTKEY='` (백틱)'

@@ -21,14 +21,16 @@ def execute(request: Request, control: JobControl):
     if isinstance(request, PdfPagesRequest):
         from bakuri.conversion.pdf_split import split_pdf
 
-        return split_pdf(
-            request.file.path,
-            request.mode,
-            request.every,
-            request.selection,
-            request.separate,
-            control,
-        )
+        from pathlib import Path
+
+        source = Path(request.file.path)
+        args = request.mode, request.every, request.selection, request.separate, control
+        if source.suffix.lower() == ".pdf":
+            return split_pdf(source, *args)
+
+        from bakuri.conversion.office_split import split_office
+
+        return split_office(source, *args)
     from bakuri.conversion.multi_image import resolve_selections, process_selected_images
 
     selections = resolve_selections(request.files, request.multi_images)

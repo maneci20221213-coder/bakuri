@@ -19,6 +19,7 @@ SPREADSHEETS = {
     ".slk",
 }
 WORDS = {".doc", ".docx"}
+PAGE_SPLIT_INPUTS = {".pdf"} | HANCOM | WORDS
 PRESENTATIONS = {".ppt", ".pptx"}
 SUPPORTED = IMAGES | {".pdf", ".hwp", ".hwpx", ".odt"} | SPREADSHEETS | WORDS | PRESENTATIONS
 

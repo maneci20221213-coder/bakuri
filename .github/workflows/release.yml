@@ -1,8 +1,5 @@
 name: Windows installer and GitHub Release
 on:
-  push:
-    branches: [main]
-    paths: [version.py]
   workflow_dispatch:
     inputs:
       publish:
@@ -73,7 +70,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BAKURI_VERSION: ${{ steps.app.outputs.version }}
-          BAKURI_PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
+          BAKURI_PUBLISH: ${{ inputs.publish }}
         run: |
           $Tag="v$env:BAKURI_VERSION"
           $PreRelease=$env:BAKURI_VERSION.Contains('-')
@@ -89,10 +86,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Draft release update failed.' }
             exit 0
           }
-          if ($Tag -ne 'v1.0.2') { throw 'Unexpected release version.' }
-          git push origin '1e9069777e4c70a9c358d88cf06693df9ac0f9ae:refs/tags/v1.0.2'
-          if ($LASTEXITCODE -ne 0) { throw 'Release tag creation failed.' }
-          $Arguments=@('release','create',$Tag,'--repo',$env:GITHUB_REPOSITORY,'--verify-tag','--title',"바꾸리 $env:BAKURI_VERSION",'--notes-file','RELEASE-NOTES.md')
+          $Arguments=@('release','create',$Tag,'--repo',$env:GITHUB_REPOSITORY,'--target',$env:GITHUB_SHA,'--title',"바꾸리 $env:BAKURI_VERSION",'--notes-file','RELEASE-NOTES.md')
           if ($PreRelease) { $Arguments+=@('--prerelease','--latest=false') } elseif ($env:BAKURI_PUBLISH -eq 'true') { $Arguments+='--latest' }
           if ($env:BAKURI_PUBLISH -ne 'true') { $Arguments+='--draft' }
           & gh @Arguments @Files

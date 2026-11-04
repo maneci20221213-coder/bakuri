@@ -1,8 +1,5 @@
 name: Windows installer and GitHub Release
 on:
-  push:
-    branches: [main]
-    paths: [version.py]
   workflow_dispatch:
     inputs:
       publish:
@@ -69,7 +66,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Create release with complete asset set
-        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

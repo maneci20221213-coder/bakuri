@@ -162,7 +162,7 @@ class PdfSplitTests(unittest.TestCase):
 
             self.assertEqual(report.outcome, "done", report.error)
             output = Path(report.paths[0])
-            self.assertEqual(output.parent, source.parent)
+            self.assertTrue(output.parent.samefile(source.parent))
             self.assertTrue(output.name.startswith("office_추출본"))
             with fitz.open(output) as doc:
                 self.assertEqual([page.get_text().strip() for page in doc], ["Page 4", "Page 2"])

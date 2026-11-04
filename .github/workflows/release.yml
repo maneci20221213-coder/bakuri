@@ -1,8 +1,5 @@
 name: Windows installer and GitHub Release
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/release.yml']
   workflow_dispatch:
     inputs:
       publish:
@@ -73,7 +70,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BAKURI_VERSION: ${{ steps.app.outputs.version }}
-          BAKURI_PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
+          BAKURI_PUBLISH: ${{ inputs.publish }}
         run: |
           $Tag="v$env:BAKURI_VERSION"
           $PreRelease=$env:BAKURI_VERSION.Contains('-')

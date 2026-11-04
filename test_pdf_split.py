@@ -3,10 +3,11 @@
 import tempfile
 from pathlib import Path
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import fitz
 from bakuri.domain.pdf_selection import page_groups
 from bakuri.conversion.pdf_split import split_pdf, pdf_page_count
+from bakuri.conversion.office_split import _HancomPages
 from bakuri.application.control import JobControl, Cancelled
 from bakuri.application.runner import run_job
 from bakuri.domain.models import PdfPagesRequest, InputFile
@@ -153,10 +154,11 @@ class PdfSplitTests(unittest.TestCase):
             source = self.path.with_name("office" + suffix)
             source.write_bytes(b"original")
 
-            def save(original, dest, spans, control):
+            def save(original, dest, spans, page_count, control):
                 self.assertEqual(original.read_bytes(), b"original")
                 self.assertEqual(dest.suffix, suffix)
                 self.assertEqual(spans, [(30, 40), (10, 20)])
+                self.assertEqual(page_count, 2)
                 dest.write_bytes(b"editable result")
 
             with (
@@ -182,6 +184,27 @@ class PdfSplitTests(unittest.TestCase):
             self.assertEqual(output.name, "office_추출본" + suffix)
             self.assertEqual(output.read_bytes(), b"editable result")
             self.assertEqual(source.read_bytes(), b"original")
+
+    def test_hancom_only_removes_an_empty_page_past_the_requested_count(self):
+        for total, end, begin, after, commands in (
+            (2, (0, 4, 0), (0, 4, 0), 1, []),
+            (3, (0, 4, 1), (0, 4, 0), 2, ["MoveDocEnd", "MovePageBegin"]),
+            (3, (0, 4, 0), (0, 4, 0), 2, ["MoveDocEnd", "MovePageBegin", "DeleteBack"]),
+            (3, (0, 4, 0), (0, 4, 0), 3, ["MoveDocEnd", "MovePageBegin", "DeleteBack", "Undo"]),
+        ):
+            with self.subTest(total=total, end=end, begin=begin, after=after):
+                app = Mock(PageCount=total)
+                app.GetPos.side_effect = [end, begin]
+
+                def run(action):
+                    if action == "DeleteBack":
+                        app.PageCount = after
+                    return True
+
+                app.HAction.Run.side_effect = run
+                editor = _HancomPages(app, self.path)
+                editor._trim_trailing_blank_pages(2, JobControl())
+                self.assertEqual([call.args[0] for call in app.HAction.Run.call_args_list], commands)
 
     def test_password_pdf_rejected_without_outputs(self):
         locked = self.path.with_name("locked.pdf")

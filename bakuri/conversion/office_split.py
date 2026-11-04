@@ -44,7 +44,7 @@ class _WordPages:
             return self.book.Content.Start
         return self.book.GoTo(What=1, Which=1, Count=index + 1).Start  # absolute page
 
-    def save(self, source, dest, spans, control):
+    def save(self, source, dest, spans, page_count, control):
         copyfile(source, dest)
         book = self.app.Documents.Open(str(dest), ReadOnly=False, AddToRecentFiles=False)
         try:
@@ -126,7 +126,25 @@ class _HancomPages:
             raise PageSelectionError("선택한 쪽의 한글 본문 경계를 찾을 수 없습니다.")
         return position[1:]
 
-    def save(self, source, dest, spans, control):
+    def _trim_trailing_blank_pages(self, expected_count, control):
+        app = self.app
+        while (previous_count := app.PageCount) > expected_count:
+            control.check()
+            app.HAction.Run("MoveDocEnd")
+            end = tuple(app.GetPos())
+            app.HAction.Run("MovePageBegin")
+            # Equal positions mean the page has no body content, including objects.
+            # Backspace only at the start of an empty body paragraph.
+            if end != tuple(app.GetPos()) or end[0] != 0 or end[1] == 0 or end[2] != 0:
+                return
+            if not app.HAction.Run("DeleteBack"):
+                return
+            if not expected_count <= app.PageCount < previous_count:
+                if not app.HAction.Run("Undo"):
+                    raise PageSelectionError("추출한 한글 문서의 마지막 쪽을 확인할 수 없습니다.")
+                return
+
+    def save(self, source, dest, spans, page_count, control):
         if not self.source_open:
             self.open()
         app = self.app
@@ -150,6 +168,7 @@ class _HancomPages:
                 if not app.SetTextFile(block, "HWP", "insertfile" if index else ""):
                     raise PageSelectionError("추출한 한글 본문을 새 문서에 넣을 수 없습니다.")
             control.check()
+            self._trim_trailing_blank_pages(page_count, control)
             if not app.SaveAs(str(dest), source.suffix[1:].upper(), ""):
                 raise PageSelectionError("추출한 한글 문서를 저장할 수 없습니다.")
         finally:
@@ -191,7 +210,11 @@ def split_office(source, mode, every, selection, separate, control):
                     copyfile(original, dest)
                 else:
                     editor.save(
-                        original, dest, [(positions[a], positions[b]) for a, b in spans], control
+                        original,
+                        dest,
+                        [(positions[a], positions[b]) for a, b in spans],
+                        len(group),
+                        control,
                     )
                 target = page_output_path(source, count, group, mode == "extract" and not separate)
                 control.publish(dest, target)

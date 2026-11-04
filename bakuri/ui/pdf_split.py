@@ -1,17 +1,19 @@
-"""Shared PDF split/extract dialog for the quick popup and main conversion view."""
+"""Shared page split/extract dialog for the quick popup and main conversion view."""
 
 from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QFormLayout,
-    QLabel,
-    QComboBox,
-    QSpinBox,
-    QLineEdit,
+    QButtonGroup,
     QCheckBox,
+    QDialog,
     QDialogButtonBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QRadioButton,
+    QSpinBox,
+    QVBoxLayout,
 )
 from bakuri.domain.pdf_selection import page_groups
 from theme import stylesheet
@@ -21,29 +23,54 @@ class PdfSplitDialog(QDialog):
     def __init__(self, path, count, parent=None):
         super().__init__(parent)
         self.count = count
-        self.setWindowTitle("PDF 페이지 나누기 / 추출")
+        self.setWindowTitle("페이지 나누기")
         self.setMinimumWidth(480)
         self.setStyleSheet(stylesheet())
         layout = QVBoxLayout(self)
-        title = QLabel(f"{Path(path).name} · 전체 {count}페이지")
+        filename = Path(path).name
+        title = QLabel(f"{filename} · 전체 {count}페이지" if count is not None else filename)
+        title.setTextFormat(Qt.PlainText)
         title.setWordWrap(True)
         layout.addWidget(title)
         form = QFormLayout()
         layout.addLayout(form)
-        self.mode = QComboBox()
-        self.mode.addItem("일정 페이지마다 나누기", "interval")
-        self.mode.addItem("원하는 페이지 추출", "extract")
-        form.addRow("방식", self.mode)
+
+        self.modes = QButtonGroup(self)
+        self.mode_buttons = {}
+        for mode, label in (
+            ("interval", "일정하게 나누기"),
+            ("boundaries", "특정 페이지 기준"),
+            ("extract", "일부만 추출"),
+        ):
+            button = QRadioButton(label)
+            self.modes.addButton(button)
+            self.mode_buttons[mode] = button
+        self.mode_buttons["interval"].setChecked(True)
         self.every = QSpinBox()
-        self.every.setRange(1, count)
-        self.every.setSuffix("페이지마다")
-        form.addRow("나눌 단위", self.every)
+        self.every.setRange(1, count if count is not None else 999999)
+        interval = QHBoxLayout()
+        interval.addWidget(self.every)
+        interval.addWidget(QLabel("페이지마다"))
+        interval.addStretch()
+        form.addRow(self.mode_buttons["interval"], interval)
+
+        self.boundaries = QLineEdit()
+        self.boundaries.setPlaceholderText("새 파일을 시작할 페이지 · 예: 4, 8")
+        form.addRow(self.mode_buttons["boundaries"], self.boundaries)
         self.selection = QLineEdit()
-        self.selection.setPlaceholderText("예: 1-3, 5, 8-10")
-        form.addRow("추출할 페이지", self.selection)
-        self.separate = QCheckBox("범위별로 각각 저장")
-        form.addRow(self.separate)
-        hint = QLabel("페이지는 1쪽부터 셉니다. 원본 문서 순서대로 새 PDF에 저장합니다.")
+        self.selection.setPlaceholderText("예: 5, 1-3, 8")
+        form.addRow(self.mode_buttons["extract"], self.selection)
+        self.separate = QCheckBox("입력한 범위별로 각각 저장")
+        form.addRow("", self.separate)
+
+        hint = QLabel(
+            "특정 페이지 기준은 입력한 페이지부터 새 파일을 만듭니다. "
+            "일부만 추출할 때는 입력한 순서대로 저장합니다."
+        )
+        if count is None:
+            hint.setText(
+                hint.text() + "\n한글 또는 Word에서 문서를 PDF로 변환한 뒤 나누어 저장합니다."
+            )
         hint.setWordWrap(True)
         layout.addWidget(hint)
         self.summary = QLabel()
@@ -56,31 +83,43 @@ class PdfSplitDialog(QDialog):
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons)
-        self.mode.currentIndexChanged.connect(self.refresh)
+        self.modes.buttonToggled.connect(self.mode_changed)
         self.every.valueChanged.connect(self.refresh)
+        self.boundaries.textChanged.connect(self.refresh)
         self.selection.textChanged.connect(self.refresh)
         self.separate.toggled.connect(self.refresh)
         self.refresh()
 
+    def mode_changed(self, button, checked):
+        if checked:
+            self.refresh()
+
     def options(self):
+        mode = next(mode for mode, button in self.mode_buttons.items() if button.isChecked())
         return dict(
-            mode=self.mode.currentData(),
+            mode=mode,
             every=self.every.value(),
-            selection=self.selection.text(),
-            separate=self.separate.isChecked(),
+            selection=self.boundaries.text() if mode == "boundaries" else self.selection.text(),
+            separate=mode == "extract" and self.separate.isChecked(),
         )
 
     def refresh(self):
-        extract = self.mode.currentData() == "extract"
-        self.every.setEnabled(not extract)
-        self.selection.setEnabled(extract)
-        self.separate.setEnabled(extract)
+        options = self.options()
+        mode = options["mode"]
+        self.every.setEnabled(mode == "interval")
+        self.boundaries.setEnabled(mode == "boundaries")
+        self.selection.setEnabled(mode == "extract")
+        self.separate.setEnabled(mode == "extract")
         try:
-            groups = page_groups(self.count, **self.options())
-            self.summary.setText(
-                f"PDF {len(groups)}개 생성 예정 · 총 {sum(map(len, groups))}페이지"
-            )
-            valid = True
+            if self.count is None:
+                self.summary.setText("페이지 수는 문서를 연 뒤 확인합니다.")
+                valid = mode == "interval" or bool(options["selection"].strip())
+            else:
+                groups = page_groups(self.count, **options)
+                self.summary.setText(
+                    f"PDF {len(groups)}개 생성 예정 · 총 {sum(map(len, groups))}페이지"
+                )
+                valid = True
         except ValueError as error:
             self.summary.setText(str(error))
             valid = False

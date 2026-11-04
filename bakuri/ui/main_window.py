@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QWidget,
 )
-from bakuri.domain.formats import SUPPORTED, can_convert, can_merge, IMAGES
+from bakuri.domain.formats import SUPPORTED, can_convert, can_merge, IMAGES, PAGE_SPLIT_INPUTS
 from bakuri.application.control import JobControl
 from settings_ui import SettingsDialog
 from theme import icon
@@ -164,16 +164,25 @@ class Window(QWidget):
         model = self.fmt.model()
         for index in range(self.fmt.count()):
             name = self.fmt.itemText(index)
-            allowed = (
-                not paths or all(Path(p).suffix.lower() in IMAGES | {".pdf"} for p in paths)
-                if name == "용량 축소"
-                else not paths or all(can_convert(p, name) for p in paths)
-            )
+            if name == "페이지 나누기":
+                allowed = len(paths) == 1 and Path(paths[0]).suffix.lower() in PAGE_SPLIT_INPUTS
+            elif name == "용량 축소":
+                allowed = not paths or all(
+                    Path(p).suffix.lower() in IMAGES | {".pdf"} for p in paths
+                )
+            else:
+                allowed = not paths or all(can_convert(p, name) for p in paths)
             item = model.item(index)
             item.setEnabled(allowed)
             item.setForeground(QBrush(QColor("#26354A" if allowed else "#A4AFBD")))
             item.setToolTip(
-                "" if allowed else "선택한 파일 중 이 형식으로 변환할 수 없는 파일이 있습니다."
+                ""
+                if allowed
+                else (
+                    "PDF, 한글 또는 Word 문서 한 개를 선택해 주세요."
+                    if name == "페이지 나누기"
+                    else "선택한 파일 중 이 형식으로 변환할 수 없는 파일이 있습니다."
+                )
             )
         current = self.fmt.currentIndex()
         if current < 0 or not model.item(current).isEnabled():
@@ -189,13 +198,19 @@ class Window(QWidget):
         )
         self.pdf_pages.setVisible(single_pdf)
         self.pdf_pages.setEnabled(single_pdf and not self.busy)
-        self.merge.setVisible(not single_pdf)
+        splitting = format == "페이지 나누기"
+        self.individual.setVisible(not splitting)
+        self.merge.setVisible(not single_pdf and not splitting)
         self.individual.setText("전체 저장" if single_pdf else "각각 저장")
         allowed = can_merge(paths, format)
         self.merge.setEnabled(allowed and not self.busy)
         self.compression_profile.setVisible(format == "용량 축소")
         if not self.busy:
-            self.run.setText("용량 축소 시작" if format == "용량 축소" else "변환 시작  →")
+            self.run.setText(
+                {"용량 축소": "용량 축소 시작", "페이지 나누기": "페이지 나누기  →"}.get(
+                    format, "변환 시작  →"
+                )
+            )
         if not allowed:
             self.individual.setChecked(True)
 
@@ -302,6 +317,9 @@ class Window(QWidget):
             or not self.fmt.model().item(self.fmt.currentIndex()).isEnabled()
         ):
             return
+        if self.fmt.currentText() == "페이지 나누기":
+            self.start_pdf_pages(paths)
+            return
         fmt = self.fmt.currentText().lower()
         merge = self.merge.isChecked() and self.merge.isEnabled()
         self.start_conversion(paths, fmt, merge)
@@ -336,14 +354,14 @@ class Window(QWidget):
     def start_pdf_pages(self, paths):
         if self.busy or self.updater.installing:
             return
-        if len(paths) != 1 or Path(paths[0]).suffix.lower() != ".pdf":
+        if len(paths) != 1 or Path(paths[0]).suffix.lower() not in PAGE_SPLIT_INPUTS:
             return
         from bakuri.conversion.pdf_split import pdf_page_count
         from .pdf_split import PdfSplitDialog
 
         self.popup.hide()
         try:
-            count = pdf_page_count(paths[0])
+            count = pdf_page_count(paths[0]) if Path(paths[0]).suffix.lower() == ".pdf" else None
         except Exception as error:
             QMessageBox.information(self, "PDF 확인", friendly_error(error, "conversion"))
             return
@@ -396,6 +414,8 @@ class Window(QWidget):
         self.tray.setToolTip(
             "바꾸리 · " + ("용량 축소" if kind == "compress" else "파일 변환") + " 중 · 0%"
         )
+        if self.settings.value("notify", True, type=bool):
+            self.results.toast.start_progress("0% · 작업 준비", self.tray.geometry())
         done = self.bus.done.emit
 
         def work():
@@ -409,7 +429,9 @@ class Window(QWidget):
             return
         if self.control and self.control.cancelled.is_set():
             return
-        self.status.setText(f"{percent}% · {text}")
+        progress = f"{percent}% · {text}"
+        self.status.setText(progress)
+        self.results.toast.update_progress(progress)
         label = "용량 축소" if self.job_kind == "compress" else "파일 변환"
         self.tray.setToolTip(f"바꾸리 · {label} 중 · {percent}%\n{text}"[:127])
 
@@ -422,8 +444,11 @@ class Window(QWidget):
         self.tray_stop_action.setEnabled(False)
         self.tray.setToolTip("바꾸리 · 중지 요청 중")
         self.status.setText("중지 요청 중 · 현재 처리 단계가 반환되면 중지합니다.")
+        self.results.toast.update_progress("중지 요청 중")
 
     def reset(self):
+        if self.results.toast.showing_progress:
+            self.results.toast.hide()
         self.mode_tabs.setEnabled(True)
         self.rename_panel.setEnabled(True)
         self.busy = False

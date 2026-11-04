@@ -27,7 +27,7 @@ class SettingsDialog(QDialog):
         self.compress_profile=QComboBox();add_profiles(self.compress_profile);self.compress_profile.setCurrentIndex(self.compress_profile.findData(read_options(window.settings)['profile']));form.addRow('해상도 축소 기본값',self.compress_profile)
         self.compress_protect=QCheckBox('글자 보호 강화 · 이미지 해상도 유지');self.compress_protect.setChecked(window.settings.value('compress_protect',False,type=bool));form.addRow(self.compress_protect)
         self.compress_strip=QCheckBox('용량 축소 시 위치정보 등 메타데이터 삭제');self.compress_strip.setChecked(window.settings.value('compress_strip',False,type=bool));form.addRow(self.compress_strip)
-        self.notify=QCheckBox('변환 완료 알림'); self.notify.setChecked(window.settings.value('notify',True,type=bool)); form.addRow(self.notify)
+        self.notify=QCheckBox('작업 진행률 및 완료 알림'); self.notify.setChecked(window.settings.value('notify',True,type=bool)); form.addRow(self.notify)
         buttons=QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel); buttons.accepted.connect(self.save); buttons.rejected.connect(self.reject); form.addRow(buttons)
     def save(self):
         try:

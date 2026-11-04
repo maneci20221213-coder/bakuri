@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from bakuri.domain.formats import IMAGES, HANCOM, SPREADSHEETS
+from bakuri.domain.formats import PAGE_SPLIT_INPUTS, IMAGES, HANCOM, SPREADSHEETS
 from theme import icon
 
 
@@ -47,6 +47,7 @@ class QuickPopup(QWidget):
             ("png", "PNG", "←", (1, 0)),
             ("jpeg", "JPEG", "→", (1, 2)),
             ("more", "확장 기능", "↓", (2, 1)),
+            ("pdf_split", "페이지 나누기", "", (0, 2)),
             ("hwpx", "HWPX", "", (1, 1)),
             ("xlsx", "XLSX", "", (1, 1)),
             ("compress", "용량 축소", "", (1, 1)),
@@ -67,7 +68,8 @@ class QuickPopup(QWidget):
             image = QLabel()
             image.setAttribute(Qt.WA_TransparentForMouseEvents)
             image.setAlignment(Qt.AlignCenter)
-            image.setPixmap(icon("plus" if key == "more" else key).pixmap(30, 32))
+            asset = {"more": "plus", "pdf_split": "pdf"}.get(key, key)
+            image.setPixmap(icon(asset).pixmap(30, 32))
             content.addWidget(image)
             text = QLabel(label)
             text.setAttribute(Qt.WA_TransparentForMouseEvents)
@@ -89,6 +91,7 @@ class QuickPopup(QWidget):
             button.clicked.connect(lambda checked=False, k=key: self.pick(k))
             grid.addWidget(button, *pos, Qt.AlignCenter)
             self.buttons[key] = button
+        self.buttons["pdf_split"].hide()
         self.note = QLabel("방향키 → Enter · Esc 닫기")
         self.note.setAlignment(Qt.AlignCenter)
         self.note.hide()
@@ -161,6 +164,8 @@ class QuickPopup(QWidget):
         extensions = {Path(p).suffix.lower() for p in paths}
         images = bool(paths) and extensions <= IMAGES
         pdfs = extensions == {".pdf"}
+        office_split = len(paths) == 1 and extensions <= PAGE_SPLIT_INPUTS and not pdfs
+        self.buttons["pdf_split"].setVisible(office_split)
         self.actions = {}
         labels = {"pdf": ("PDF", "pdf"), "png": ("PNG", "png"), "jpeg": ("JPEG", "jpeg")}
         if images:
@@ -303,6 +308,10 @@ class QuickPopup(QWidget):
                 Qt.Key_Left: "png",
                 Qt.Key_Right: "jpeg",
             }
+        if self.buttons["pdf_split"].isVisible():
+            neighbors["pdf"][Qt.Key_Right] = "pdf_split"
+            neighbors["jpeg"][Qt.Key_Up] = "pdf_split"
+            neighbors["pdf_split"] = {Qt.Key_Left: "pdf", Qt.Key_Down: "jpeg"}
         target = neighbors.get(self.current, {}).get(key)
         if target:
             self.select(target)
@@ -315,7 +324,7 @@ class QuickPopup(QWidget):
         elif key == Qt.Key_Tab:
             visible = [
                 k
-                for k in ("pdf", "png", "hwpx", "xlsx", "compress", "jpeg", "more")
+                for k in ("pdf", "png", "hwpx", "xlsx", "compress", "jpeg", "pdf_split", "more")
                 if self.buttons[k].isVisible() and self.buttons[k].isEnabled()
             ]
             self.select(visible[(visible.index(self.current) + 1) % len(visible)])

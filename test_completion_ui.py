@@ -47,6 +47,32 @@ class CompletionUiTests(unittest.TestCase):
             QTest.qWait(20)
             self.assertFalse(toast.isVisible())
 
+    def test_progress_card_displays_percent_and_completion_restores_actions(self):
+        w = self.window
+        toast = w.results.toast
+        toast.start_progress("0% · 작업 준비", w.tray.geometry())
+        w.busy = True
+        w.update_progress(37, "처리 중")
+        self.assertEqual(toast.summary.text(), "37% · 처리 중")
+        self.assertFalse(toast.actions.isVisible())
+        self.assertFalse(toast.timer.isActive())
+        w.results.finished(
+            dict(
+                paths=[],
+                outcome="done",
+                kind="compress",
+                rows=[
+                    {"status": "축소 효과 없음", "detail": "크기가 줄지 않았습니다."},
+                    {"status": "건너뜀", "detail": "보호된 파일입니다."},
+                    {"status": "실패", "detail": "처리 중 오류가 발생했습니다."},
+                ],
+            )
+        )
+        self.assertEqual(toast.summary.text(), "0개 저장 완료 · 실패 3개")
+        self.assertEqual(w.last_result["rows"][1]["status"], "건너뜀")
+        self.assertTrue(toast.actions.isVisible())
+        self.assertTrue(toast.timer.isActive())
+
     def test_disabled_alert_keeps_recent_result_without_any_popup(self):
         w = self.window
         w.settings.setValue("notify", False)

@@ -32,7 +32,7 @@ Windows file converter. Python 3.12, PySide6, Pillow, PyMuPDF; Office/Hancom COM
 - Freeze input IDs, ordered paths and options before starting a job; return `JobReport` through Qt signals.
 - Preserve originals, avoid overwrites, retain completed outputs on cancellation; rename uses journal/rollback.
 - Preserve PNG pixels/alpha, JPEG stream reuse and PDF paper geometry. Do not silently lower image quality.
-- Show completion toast only; update checks stay disabled in developer builds.
+- Use the same tray card for progress and completion; update checks stay disabled in developer builds.
 - Existing root adapters are intentional; do not create one-line modules or general plugin frameworks.
 
 ## Validation

@@ -46,3 +46,14 @@ def page_groups(count, mode="interval", every=1, selection="", separate=False):
             raise PageSelectionError("범위별로 저장할 때는 페이지가 겹치지 않게 입력해 주세요.")
         return tuple(groups)
     return (tuple(pages),)
+
+
+def page_output_path(source, count, group, extracted):
+    if extracted:
+        label = "추출본"
+    else:
+        width = max(3, len(str(count)))
+        first, last = group[0] + 1, group[-1] + 1
+        pages = f"{first:0{width}}" if first == last else f"{first:0{width}}-{last:0{width}}"
+        label = f"{pages}쪽"
+    return source.with_name(f"{source.stem}_{label}{source.suffix}")

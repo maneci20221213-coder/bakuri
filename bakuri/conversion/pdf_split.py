@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import fitz
 from bakuri.application.control import JobControl
-from bakuri.domain.pdf_selection import page_groups
+from bakuri.domain.pdf_selection import page_groups, page_output_path
 
 
 def pdf_page_count(path):
@@ -29,13 +29,10 @@ def split_pdf(
     selection="",
     separate=False,
     control=None,
-    *,
-    output_source=None,
 ):
     source = Path(source).resolve()
     control = control or JobControl()
     control.check()
-    destination = Path(output_source).resolve() if output_source else source
     with fitz.open(source) as original, tempfile.TemporaryDirectory() as directory:
         groups = page_groups(_page_count(original), mode, every, selection, separate)
         bookmarks = original.get_toc()
@@ -101,15 +98,9 @@ def split_pdf(
                     deflate_fonts=True,
                     use_objstms=1,
                 )
-            width = max(3, len(str(len(original))))
-            if mode == "extract" and not separate:
-                name = f"{destination.stem}_추출본.pdf"
-            else:
-                first, last = group[0] + 1, group[-1] + 1
-                label = (
-                    f"{first:0{width}}" if first == last else f"{first:0{width}}-{last:0{width}}"
-                )
-                name = f"{destination.stem}_{label}쪽.pdf"
-            control.publish(temp, destination.with_name(name))
+            destination = page_output_path(
+                source, len(original), group, mode == "extract" and not separate
+            )
+            control.publish(temp, destination)
     control.complete()
     return list(control.outputs)

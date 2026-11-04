@@ -67,10 +67,9 @@ class PdfSplitDialog(QDialog):
             "특정 페이지 기준은 입력한 페이지부터 새 파일을 만듭니다. "
             "일부만 추출할 때는 입력한 순서대로 저장합니다."
         )
+        output_format = Path(path).suffix[1:].upper()
         if count is None:
-            hint.setText(
-                hint.text() + "\n한글 또는 Word에서 문서를 PDF로 변환한 뒤 나누어 저장합니다."
-            )
+            hint.setText(hint.text() + f"\n원본과 같은 {output_format} 형식으로 저장합니다.")
         hint.setWordWrap(True)
         layout.addWidget(hint)
         self.summary = QLabel()
@@ -78,7 +77,7 @@ class PdfSplitDialog(QDialog):
         self.summary.setTextFormat(Qt.PlainText)
         layout.addWidget(self.summary)
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.buttons.button(QDialogButtonBox.Ok).setText("새 PDF 만들기")
+        self.buttons.button(QDialogButtonBox.Ok).setText(f"새 {output_format} 만들기")
         self.buttons.button(QDialogButtonBox.Cancel).setText("취소")
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)

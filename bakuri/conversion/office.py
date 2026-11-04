@@ -162,6 +162,22 @@ class OfficeSession:
         slide.Shapes.AddPicture(str(image), False, True, (sw - w) / 2, (sh - h) / 2, w, h)
         self.check()
 
+    def word(self):
+        self.check()
+        import pythoncom, win32com.client
+
+        if self.com is None:
+            pythoncom.CoInitialize()
+            self.com = pythoncom
+        app = self.apps.get("word")
+        if app is None:
+            app = win32com.client.DispatchEx("Word.Application")
+            self.apps["word"] = app
+            app.Visible = False
+            app.DisplayAlerts = 0
+            app.AutomationSecurity = 3
+        return app
+
     def export(self, src, dest, fmt):
         self.check()
         import pythoncom, win32com.client
@@ -183,13 +199,7 @@ class OfficeSession:
                 book.Close()
             return
         if src.suffix.lower() in WORDS and fmt.upper() == "PDF":
-            app = self.apps.get("word")
-            if app is None:
-                app = win32com.client.DispatchEx("Word.Application")
-                self.apps["word"] = app
-                app.Visible = False
-                app.DisplayAlerts = 0
-                app.AutomationSecurity = 3
+            app = self.word()
             book = app.Documents.Open(str(src), ReadOnly=True, AddToRecentFiles=False)
             try:
                 self.check()

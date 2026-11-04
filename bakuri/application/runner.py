@@ -28,20 +28,9 @@ def execute(request: Request, control: JobControl):
         if source.suffix.lower() == ".pdf":
             return split_pdf(source, *args)
 
-        from tempfile import TemporaryDirectory
-        from bakuri.domain.formats import PAGE_SPLIT_INPUTS
-        from bakuri.conversion.office import OfficeSession
+        from bakuri.conversion.office_split import split_office
 
-        if source.suffix.lower() not in PAGE_SPLIT_INPUTS:
-            raise ValueError("PDF, 한글 또는 Word 문서를 선택해 주세요.")
-        control.update(0, "문서에서 PDF 페이지 준비 중")
-        with TemporaryDirectory() as directory:
-            pdf = Path(directory) / "document.pdf"
-            with OfficeSession() as session:
-                session.control = control
-                session.export(source, pdf, "pdf")
-            control.update(20, "PDF 페이지 준비 완료")
-            return split_pdf(pdf, *args, output_source=source)
+        return split_office(source, *args)
     from bakuri.conversion.multi_image import resolve_selections, process_selected_images
 
     selections = resolve_selections(request.files, request.multi_images)

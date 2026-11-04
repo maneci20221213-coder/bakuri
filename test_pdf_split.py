@@ -143,29 +143,44 @@ class PdfSplitTests(unittest.TestCase):
                 self.assertEqual(page.get_pixmap().samples, original[index].get_pixmap().samples)
         self.assertLess(output.stat().st_size, previous.stat().st_size)
 
-    def test_office_export_uses_original_folder_name_and_requested_order(self):
-        for suffix in (".hwp", ".hwpx", ".doc", ".docx"):
+    def test_office_split_uses_native_suffix_and_requested_order(self):
+        for suffix, adapter in (
+            (".hwp", "_HancomPages"),
+            (".hwpx", "_HancomPages"),
+            (".doc", "_WordPages"),
+            (".docx", "_WordPages"),
+        ):
             source = self.path.with_name("office" + suffix)
             source.write_bytes(b"original")
 
-            def export(src, pdf, fmt):
-                self.assertEqual((src, fmt), (source, "pdf"))
-                pdf.write_bytes(self.before)
+            def save(original, dest, spans, control):
+                self.assertEqual(original.read_bytes(), b"original")
+                self.assertEqual(dest.suffix, suffix)
+                self.assertEqual(spans, [(30, 40), (10, 20)])
+                dest.write_bytes(b"editable result")
 
-            with patch("bakuri.conversion.office.OfficeSession.export", side_effect=export):
+            with (
+                patch("bakuri.conversion.office_split.OfficeSession") as session,
+                patch(f"bakuri.conversion.office_split.{adapter}") as editor,
+            ):
+                session.return_value.__enter__.return_value = session.return_value
+                editor.return_value.count.return_value = 7
+                editor.return_value.position.side_effect = lambda page, count: page * 10
+                editor.return_value.save.side_effect = save
                 report = run_job(
                     PdfPagesRequest(InputFile(source), mode="extract", selection="4, 2"),
                     JobControl(),
                     "convert",
                     lambda error, context: str(error),
                 )
+                session.return_value.export.assert_not_called()
+                editor.return_value.close.assert_called_once()
 
             self.assertEqual(report.outcome, "done", report.error)
             output = Path(report.paths[0])
             self.assertTrue(output.parent.samefile(source.parent))
-            self.assertTrue(output.name.startswith("office_추출본"))
-            with fitz.open(output) as doc:
-                self.assertEqual([page.get_text().strip() for page in doc], ["Page 4", "Page 2"])
+            self.assertEqual(output.name, "office_추출본" + suffix)
+            self.assertEqual(output.read_bytes(), b"editable result")
             self.assertEqual(source.read_bytes(), b"original")
 
     def test_password_pdf_rejected_without_outputs(self):

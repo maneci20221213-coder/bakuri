@@ -36,6 +36,8 @@ try {
   $Child=$null
  }
  Write-Host 'Installed app shortcut create/remove verification passed.'
+ & python verify_update_ui.py $Destination
+ if ($LASTEXITCODE -ne 0) { throw 'Installed update prompt retry verification failed.' }
  & python verify_update.py $Destination (Join-Path $PSScriptRoot 'Releases')
  if ($LASTEXITCODE -ne 0) { throw 'Update transport or installed SDK verification failed.' }
 } finally {

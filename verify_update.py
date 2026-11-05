@@ -20,7 +20,7 @@ def verify(root,releases):
   legacy_source=subprocess.check_output(['git','show','dbc2eaada3b62c813095645289e934a3f79bde47:update_source.py'],text=True,encoding='utf-8')
   namespace={'__name__':'bakuri_legacy_update_verification'}
   exec(compile(legacy_source,'released-0.15.0/update_source.py','exec'),namespace)
-  for baseline in ('0.15.0','1.0.0-beta.1'):
+  for baseline in ('0.15.0','1.0.0-beta.1','1.0.2'):
    node.text=baseline;older=folder/'older.version';tree.write(older,encoding='utf-8',xml_declaration=True)
    locator=velopack.VelopackLocatorConfig(root,root/'Update.exe',root/'packages',older,root/'current',False)
    def factory(source):return velopack.UpdateManager(source,locator=locator)

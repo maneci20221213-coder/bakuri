@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QWidget,
 )
-from bakuri.domain.formats import SUPPORTED, can_convert, can_merge, IMAGES, PAGE_SPLIT_INPUTS
+from bakuri.domain.formats import SUPPORTED, can_convert, can_merge, IMAGES, PAGE_SPLIT_INPUTS, CAD
 from bakuri.application.control import JobControl
 from settings_ui import SettingsDialog
 from theme import icon
@@ -193,6 +193,12 @@ class Window(QWidget):
 
     def output_changed(self, format):
         paths = self.files.checked_paths()
+        has_direction = format.lower() == "pdf" and any(
+            Path(path).suffix.lower() in IMAGES | CAD for path in paths
+        )
+        self.paper_label.setVisible(has_direction)
+        self.paper_orientation.setVisible(has_direction)
+        self.paper_orientation.setEnabled(has_direction and not self.busy)
         single_pdf = (
             format.lower() == "pdf" and len(paths) == 1 and Path(paths[0]).suffix.lower() == ".pdf"
         )
@@ -227,10 +233,18 @@ class Window(QWidget):
     def open_help(self):
         HelpDialog(self).exec()
 
+    def output_location_text(self):
+        mode = self.settings.value("output_mode", "source")
+        return {
+            "subfolder": "원본 폴더 안의 바꾸리 변환 폴더에 저장",
+            "custom": "지정한 폴더에 새 파일로 저장",
+        }.get(mode, "원본 폴더에 새 파일로 저장")
+
     def open_settings(self):
         if self.busy:
             return
-        SettingsDialog(self).exec()
+        if SettingsDialog(self).exec() == QDialog.Accepted:
+            self.status.setText(self.output_location_text())
         self.compression_profile.setCurrentIndex(
             self.compression_profile.findData(read_options(self.settings)["profile"])
         )
@@ -322,7 +336,12 @@ class Window(QWidget):
             return
         fmt = self.fmt.currentText().lower()
         merge = self.merge.isChecked() and self.merge.isEnabled()
-        self.start_conversion(paths, fmt, merge)
+        orientation = (
+            self.paper_orientation.currentData()
+            if not self.paper_orientation.isHidden()
+            else "auto"
+        )
+        self.start_conversion(paths, fmt, merge, orientation=orientation)
 
     def multi_image_choices(self, files):
         from .multi_image import choose_multi_images
@@ -334,7 +353,7 @@ class Window(QWidget):
             QMessageBox.information(self, "이미지 확인", friendly_error(error, "conversion"))
             return None
 
-    def start_conversion(self, paths, fmt, merge, anchor=None):
+    def start_conversion(self, paths, fmt, merge, anchor=None, *, orientation="auto"):
         if self.busy:
             return
         if any(not can_convert(p, fmt) for p in paths):
@@ -348,7 +367,12 @@ class Window(QWidget):
         choices = self.multi_image_choices(files)
         if choices is None:
             return
-        request = ConversionRequest(files, fmt, merge, conversion_options(self.settings), choices)
+        try:
+            options = conversion_options(self.settings, orientation)
+        except ValueError as error:
+            QMessageBox.information(self, "변환 설정", str(error))
+            return
+        request = ConversionRequest(files, fmt, merge, options, choices)
         self.begin_job(request, "convert", anchor)
 
     def start_pdf_pages(self, paths):
@@ -405,6 +429,7 @@ class Window(QWidget):
         self.files.setEnabled(False)
         self.toolbar.setEnabled(False)
         self.fmt.setEnabled(False)
+        self.paper_orientation.setEnabled(False)
         self.compression_profile.setEnabled(False)
         self.individual.setEnabled(False)
         self.merge.setEnabled(False)

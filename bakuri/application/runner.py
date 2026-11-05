@@ -44,9 +44,8 @@ def execute(request: Request, control: JobControl):
             paths,
             request.output.value,
             request.merge,
-            dpi=request.options.dpi,
-            image_mode=request.options.image_mode,
             control=control,
+            **request.options.as_kwargs(),
         )
     if isinstance(request, CompressionRequest):
         from bakuri.compression.service import compress

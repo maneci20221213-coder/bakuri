@@ -47,12 +47,25 @@ class InputFile:
 class ConversionOptions:
     dpi: int = 150
     image_mode: str = "background"
+    orientation: str = "auto"
+    output_mode: str = "source"
+    output_folder: str = ""
 
     def __post_init__(self):
         if not 1 <= self.dpi <= 1200:
             raise ValueError("이미지 해상도 설정을 확인해 주세요.")
         if self.image_mode not in {"background", "inline"}:
             raise ValueError("이미지 배치 설정을 확인해 주세요.")
+
+        if self.orientation not in {"auto", "landscape", "portrait"}:
+            raise ValueError("PDF 용지 방향을 확인해 주세요.")
+        if self.output_mode not in {"source", "subfolder", "custom"}:
+            raise ValueError("변환 파일 저장 위치를 확인해 주세요.")
+        if self.output_mode == "custom" and not Path(self.output_folder).is_absolute():
+            raise ValueError("변환 파일을 저장할 폴더를 지정해 주세요.")
+
+    def as_kwargs(self):
+        return {field: getattr(self, field) for field in self.__dataclass_fields__}
 
 
 @dataclass(frozen=True, slots=True)

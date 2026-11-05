@@ -240,9 +240,9 @@ def process_selected_images(request, selections, control):
                 paths,
                 request.output.value,
                 merge,
-                dpi=request.options.dpi,
-                image_mode=request.options.image_mode,
                 control=publication,
+                source_folders=folders,
+                **request.options.as_kwargs(),
             )
         else:
             try:

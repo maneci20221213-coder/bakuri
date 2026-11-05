@@ -2,6 +2,7 @@
 
 import os
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import QEvent, QKeyCombination, Qt, Signal
 from PySide6.QtGui import QKeySequence
@@ -10,6 +11,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
     QFrame,
     QHBoxLayout,
@@ -199,6 +201,30 @@ class SettingsDialog(QDialog):
         self.load_directions()
 
         form = page("변환")
+        self.output_mode = QComboBox()
+        for label, value in (
+            ("같은 위치", "source"),
+            ("새 폴더", "subfolder"),
+            ("폴더 지정", "custom"),
+        ):
+            self.output_mode.addItem(label, value)
+        self.output_mode.setCurrentIndex(
+            max(0, self.output_mode.findData(settings.value("output_mode", "source")))
+        )
+        form.addRow("변환 파일 생성 위치", self.output_mode)
+        self.output_folder = QLineEdit(settings.value("output_folder", ""))
+        self.output_folder.setReadOnly(True)
+        self.output_browse = QPushButton("찾아보기")
+        self.output_browse.clicked.connect(self.choose_output_folder)
+        location = QHBoxLayout()
+        location.addWidget(self.output_folder)
+        location.addWidget(self.output_browse)
+        form.addRow("지정 폴더", location)
+        self.output_mode.currentIndexChanged.connect(self.update_output_folder)
+        self.update_output_folder()
+        note = QLabel("새 폴더를 선택하면 원본 폴더 안의 ‘바꾸리 변환’에 저장합니다.")
+        note.setWordWrap(True)
+        form.addRow(note)
         self.dpi = QComboBox()
         self.dpi.addItems(["96", "150", "200", "300"])
         self.dpi.setCurrentText(str(settings.value("dpi", 150, type=int)))
@@ -231,6 +257,18 @@ class SettingsDialog(QDialog):
         layout.addWidget(buttons)
         categories.setCurrentRow(0)
 
+    def update_output_folder(self):
+        enabled = self.output_mode.currentData() == "custom"
+        self.output_folder.setEnabled(enabled)
+        self.output_browse.setEnabled(enabled)
+
+    def choose_output_folder(self):
+        selected = QFileDialog.getExistingDirectory(
+            self, "변환 파일 저장 폴더", self.output_folder.text()
+        )
+        if selected:
+            self.output_folder.setText(selected)
+
     def reset_shortcut(self):
         self.key.binding = ""
         self.key.setText(DEFAULT_HOTKEY)
@@ -250,6 +288,12 @@ class SettingsDialog(QDialog):
             combo.blockSignals(blocked)
 
     def save(self):
+        if (
+            self.output_mode.currentData() == "custom"
+            and not Path(self.output_folder.text()).is_absolute()
+        ):
+            QMessageBox.information(self, "저장 위치", "변환 파일을 저장할 폴더를 지정해 주세요.")
+            return
         try:
             if self.shell_integration:
                 from windows import register_menu, set_startup
@@ -265,6 +309,8 @@ class SettingsDialog(QDialog):
                 "notify": self.notify.isChecked(),
                 "explorer": self.explorer.isChecked(),
                 "dpi": int(self.dpi.currentText()),
+                "output_mode": self.output_mode.currentData(),
+                "output_folder": self.output_folder.text(),
                 "image_mode": self.image_mode.currentData(),
                 "compress_profile": self.compress_profile.currentData(),
                 "compress_protect": self.compress_protect.isChecked(),

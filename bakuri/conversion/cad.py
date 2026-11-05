@@ -133,8 +133,10 @@ def read_dwg(source, control):
         return ezdxf.readfile(converted)
 
 
-def cad_to_pdf(source, dest, control, advance):
+def cad_to_pdf(source, dest, control, advance, orientation="auto"):
     import ezdxf
+    from functools import lru_cache
+    from ezdxf.fonts import fonts
     from ezdxf.addons.drawing import Frontend, RenderContext, config, layout, pymupdf
 
     advance(0.1)
@@ -149,9 +151,49 @@ def cad_to_pdf(source, dest, control, advance):
     if control:
         control.check()
     advance(0.2)
+    manager = fonts.font_manager
+
+    @lru_cache(maxsize=None)
+    def glyphs(name):
+        if not manager.has_font(name) or Path(name).suffix.lower() not in {".ttf", ".ttc", ".otf"}:
+            return {}
+        try:
+            return manager.get_ttf_font(name).getBestCmap() or {}
+        except fonts.FontNotFoundError:
+            return {}
+
+    class KoreanRenderContext(RenderContext):
+        def resolve_font(self, entity):
+            original = super().resolve_font(entity)
+            plain_text = getattr(entity, "plain_text", None)
+            if not callable(plain_text):
+                return original
+            required = {
+                code
+                for code in map(ord, plain_text())
+                if 0x1100 <= code <= 0x11FF
+                or 0x3130 <= code <= 0x318F
+                or 0xAC00 <= code <= 0xD7AF
+                or 0x4E00 <= code <= 0x9FFF
+            }
+            if not required or (
+                original and required <= glyphs(Path(original.filename).name).keys()
+            ):
+                return original
+            for name in (
+                "malgun.ttf",
+                "malgunbd.ttf",
+                "gulim.ttc",
+                "batang.ttc",
+                "NotoSansCJK-Regular.ttc",
+            ):
+                if required <= glyphs(name).keys():
+                    return manager.get_font_face(name)
+            return original
+
     backend = pymupdf.PyMuPdfBackend()
     Frontend(
-        RenderContext(document),
+        KoreanRenderContext(document),
         backend,
         config.Configuration(
             background_policy=config.BackgroundPolicy.WHITE,
@@ -163,7 +205,23 @@ def cad_to_pdf(source, dest, control, advance):
     bounds = backend.player().bbox()
     if not bounds.has_data:
         raise CadError("도면의 모형 공간에 변환할 내용이 없습니다.")
-    width, height = (297, 210) if bounds.size.x >= bounds.size.y else (210, 297)
+    landscape = orientation == "landscape" or (
+        orientation == "auto" and bounds.size.x >= bounds.size.y
+    )
+    width, height = (297, 210) if landscape else (210, 297)
     page = layout.Page(width, height, margins=layout.Margins.all(8))
-    dest.write_bytes(backend.get_pdf_bytes(page))
+    # Compact PDF objects and streams without rasterizing the drawing.
+    with backend.get_replay(page, render_box=bounds).doc as pdf:
+        if control:
+            control.check()
+        pdf.save(
+            dest,
+            garbage=4,
+            clean=True,
+            deflate=True,
+            deflate_images=True,
+            deflate_fonts=True,
+            use_objstms=1,
+            compression_effort=100,
+        )
     advance(0.8)

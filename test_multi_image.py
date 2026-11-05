@@ -12,6 +12,7 @@ from bakuri.conversion.multi_image import inspect_multi_image, resolve_selection
 from bakuri.domain.models import (
     InputFile,
     ConversionRequest,
+    ConversionOptions,
     CompressionRequest,
     CompressionOptions,
 )
@@ -121,6 +122,21 @@ class MultiImageTests(unittest.TestCase):
                     color = image.convert("RGB").getpixel((20, 20))
                     self.assertGreater(color[0 if i == 0 else 2], 230)
         self.assertEqual(self.path.read_bytes(), self.before)
+
+    def test_multi_image_outputs_follow_original_subfolder_and_pdf_orientation(self):
+        control = JobControl()
+        request = ConversionRequest(
+            self.files,
+            "pdf",
+            options=ConversionOptions(orientation="landscape", output_mode="subfolder"),
+            multi_images=self.choices("all"),
+        )
+        execute(request, control)
+        self.assertEqual(len(control.outputs), 2)
+        for output in control.outputs:
+            self.assertEqual(Path(output).parent, self.path.parent.resolve() / "바꾸리 변환")
+            with fitz.open(output) as pdf:
+                self.assertEqual(pdf[0].rect, fitz.paper_rect("a4-l"))
 
     def test_representative_flag_can_choose_second_image(self):
         patch_entries(self.path, [(1, 0, 0x20000000)])

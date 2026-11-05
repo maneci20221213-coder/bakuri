@@ -77,3 +77,57 @@ class CadConversionTests(unittest.TestCase):
    with patch.dict(os.environ,{'ProgramFiles':str(root),'ProgramW6432':'','ProgramFiles(x86)':''}),patch('bakuri.conversion.cad.subprocess.Popen',side_effect=start):
     self.assertEqual(find_oda(),exe)
     self.assertTrue(Path(convert([source],'pdf')[0]).is_file())
+
+ def test_cad_pdf_is_compressed_and_keeps_vector_geometry(self):
+  import ezdxf
+  from ezdxf.addons.drawing import Frontend,RenderContext,layout,pymupdf
+  with tempfile.TemporaryDirectory() as folder:
+   source=Path(folder)/'detail.dxf'
+   doc=ezdxf.new()
+   for i in range(500):doc.modelspace().add_line((i,0),(i+1,250))
+   doc.saveas(source)
+   raw=pymupdf.PyMuPdfBackend()
+   Frontend(RenderContext(doc),raw).draw_layout(doc.modelspace())
+   baseline=raw.get_pdf_bytes(layout.Page(210,297,margins=layout.Margins.all(8)))
+   result=Path(convert([source],'pdf',orientation='portrait')[0])
+   self.assertLess(result.stat().st_size,len(baseline))
+   with fitz.open(result) as pdf:
+    self.assertGreater(pdf[0].rect.height,pdf[0].rect.width)
+    self.assertGreaterEqual(len(pdf[0].get_drawings()),500)
+
+ def test_cad_text_with_missing_font_matches_installed_korean_font(self):
+  import ezdxf
+  from ezdxf.fonts import fonts
+  manager=fonts.font_manager
+  fallback=next((name for name in ('malgun.ttf','malgunbd.ttf','gulim.ttc','batang.ttc','NotoSansCJK-Regular.ttc') if manager.has_font(name)),None)
+  if not fallback:self.skipTest('No Korean CAD fallback font installed')
+  with tempfile.TemporaryDirectory() as folder:
+   images=[]
+   for index,font in enumerate(('missing-cad-font.shx',fallback)):
+    source=Path(folder)/f'lettering-{index}.dxf'
+    doc=ezdxf.new();doc.styles.new('CAD_TEXT',dxfattribs={'font':font})
+    doc.modelspace().add_text('한글 치수',dxfattribs={'style':'CAD_TEXT','height':10})
+    doc.saveas(source)
+    result=convert([source],'pdf',orientation='landscape')[0]
+    with fitz.open(result) as pdf:
+     pix=pdf[0].get_pixmap()
+     images.append(pix.samples)
+   self.assertEqual(images[0],images[1])
+
+
+class ConversionDestinationTests(unittest.TestCase):
+ def test_image_pdf_paper_orientation_and_output_folders(self):
+  with tempfile.TemporaryDirectory() as folder:
+   root=Path(folder);source=root/'source.jpg'
+   Image.new('RGB',(80,40),'red').save(source)
+   result=Path(convert([source],'pdf',orientation='portrait',output_mode='subfolder')[0])
+   self.assertEqual(result.parent,root.resolve()/'바꾸리 변환')
+   with fitz.open(result) as pdf:
+    page=pdf[0]
+    self.assertEqual(page.rect,fitz.paper_rect('a4'))
+    image=page.get_images()[0]
+    self.assertEqual(pdf.xref_stream_raw(image[0]),source.read_bytes())
+   chosen=root/'custom'
+   result=Path(convert([source],'pdf',orientation='landscape',output_mode='custom',output_folder=str(chosen))[0])
+   self.assertEqual(result.parent,chosen.resolve())
+   with fitz.open(result) as pdf:self.assertEqual(pdf[0].rect,fitz.paper_rect('a4-l'))

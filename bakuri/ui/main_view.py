@@ -94,6 +94,15 @@ def build_main_view(self):
     self.fmt.setFixedWidth(150)
     self.fmt.setToolTip("XLSX 출력은 매크로를 저장하지 않습니다. 원본 파일은 보존됩니다.")
     row.addWidget(self.fmt)
+    self.paper_label = QLabel("용지 방향")
+    self.paper_orientation = QComboBox()
+    for label, value in (("자동", "auto"), ("가로", "landscape"), ("세로", "portrait")):
+        self.paper_orientation.addItem(label, value)
+    self.paper_orientation.setAccessibleName("PDF 용지 방향")
+    row.addWidget(self.paper_label)
+    row.addWidget(self.paper_orientation)
+    self.paper_label.hide()
+    self.paper_orientation.hide()
     self.compression_profile = QComboBox()
     add_profiles(self.compression_profile)
     self.compression_profile.setMinimumWidth(140)
@@ -136,7 +145,7 @@ def build_main_view(self):
     row.addWidget(folder)
     self.output_folders = []
     self.notification_folders = []
-    self.status = QLabel("원본 폴더에 새 파일로 저장")
+    self.status = QLabel(self.output_location_text())
     self.status.setObjectName("status")
     self.status.setWordWrap(True)
     self.status.linkActivated.connect(self.status_link)

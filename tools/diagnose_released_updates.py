@@ -40,7 +40,7 @@ def check(exe, label, wait=75):
     report={'label':label,'windows':[title for _,title in observed],
             'prompt':any(title=='바꾸리 업데이트' for _,title in observed),
             'errors':log.read_text(encoding='utf-8') if log.exists() else ''}
-    print(json.dumps(report,ensure_ascii=False),flush=True)
+    print(json.dumps(report,ensure_ascii=True),flush=True)
     (root/(label+'.json')).write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
     return observed
 

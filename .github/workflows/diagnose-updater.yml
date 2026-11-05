@@ -10,6 +10,8 @@ jobs:
     if: github.event.head_commit.message == 'Diagnose released 1.0.2 updater'
     runs-on: windows-2022
     timeout-minutes: 12
+    env:
+      PYTHONIOENCODING: utf-8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

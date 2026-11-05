@@ -2,7 +2,7 @@
 
 import sys
 
-from PySide6.QtCore import QEvent, QKeyCombination, Qt
+from PySide6.QtCore import QEvent, QKeyCombination, Qt, Signal
 from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -21,13 +22,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from bakuri.domain.quick_actions import ACTIONS, DIRECTIONS, PROFILE_CHOICES
+from bakuri.domain.quick_actions import ACTIONS, DIRECTIONS, PROFILES
 from build_channel import DEFAULT_HOTKEY, DEVELOPMENT
 from user_messages import friendly_error
 from work_ui import add_profiles, read_options
 
 
 class ShortcutEdit(QLineEdit):
+    capture_changed = Signal(bool)
+
     modifiers = {
         Qt.ShiftModifier: 0x10,
         Qt.ControlModifier: 0x11,
@@ -39,7 +42,20 @@ class ShortcutEdit(QLineEdit):
         super().__init__(text)
         self.binding = binding
         self.setReadOnly(True)
-        self.setAccessibleName("빠른 실행 단축키")
+        self.setAccessibleName("빠른 변환 단축키")
+        self.setToolTip("Windows 예약 단축키는 사용이 제한될 수 있습니다.")
+        self.setStyleSheet(
+            "QLineEdit { border: 1px solid #c3cddb; border-radius: 5px; padding: 5px; }"
+            "QLineEdit:focus { border: 2px solid #2e83f2; padding: 4px; background: #edf5ff; }"
+        )
+
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+        self.capture_changed.emit(True)
+
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        self.capture_changed.emit(False)
 
     def event(self, event):
         if event.type() == QEvent.ShortcutOverride:
@@ -82,7 +98,9 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         categories = QListWidget()
         categories.setAccessibleName("설정 분류")
-        categories.setFixedWidth(110)
+        categories.setFixedWidth(124)
+        categories.setSpacing(5)
+        categories.setStyleSheet("QListWidget::item { padding: 7px 9px; }")
         pages = QStackedWidget()
         content = QHBoxLayout()
         content.addWidget(categories)
@@ -116,7 +134,7 @@ class SettingsDialog(QDialog):
         self.notify.setChecked(settings.value("notify", True, type=bool))
         form.addRow(self.notify)
 
-        form = page("빠른 실행")
+        form = page("빠른 변환")
         self.enabled = QCheckBox("단축키 사용")
         self.enabled.setChecked(settings.value("hotkey_enabled", True, type=bool))
         form.addRow(self.enabled)
@@ -129,19 +147,29 @@ class SettingsDialog(QDialog):
         reset.clicked.connect(self.reset_shortcut)
         keys.addWidget(reset)
         form.addRow("단축키", keys)
-        hint = QLabel(
-            "입력칸을 클릭한 뒤 키 또는 조합을 누르세요. Windows 예약 단축키는 사용이 제한될 수 있습니다."
-        )
+        idle_hint = "입력칸을 클릭한 뒤 키 또는 조합을 누르세요."
+        hint = QLabel(idle_hint)
         hint.setWordWrap(True)
+        self.key.capture_changed.connect(
+            lambda active: hint.setText(
+                "입력 준비됨 · 원하는 키를 누르세요." if active else idle_hint
+            )
+        )
         form.addRow(hint)
+        divider = QFrame()
+        divider.setFrameShape(QFrame.HLine)
+        form.addRow(divider)
+        title = QLabel("빠른 변환 팝업 설정")
+        title.setStyleSheet("font-weight: bold; padding-top: 5px;")
+        form.addRow(title)
 
         self.profile = QComboBox()
-        for profile, label in PROFILE_CHOICES.items():
+        for profile, label in PROFILES.items():
             self.profile.addItem(label, profile)
         form.addRow("선택한 파일 유형", self.profile)
         self.quick_menu = {
             (profile, key): settings.value(f"quick_menu/{profile}/{key}", "")
-            for profile in PROFILE_CHOICES
+            for profile in PROFILES
             for key in DIRECTIONS
         }
         self.direction_boxes = {}
@@ -150,7 +178,7 @@ class SettingsDialog(QDialog):
             combo.addItem("기본 동작", "")
             for action, (name, _) in ACTIONS.items():
                 combo.addItem(name, action)
-            combo.activated.connect(
+            combo.currentIndexChanged.connect(
                 lambda index, key=key, combo=combo: self.change_direction(
                     key, combo.itemData(index)
                 )
@@ -160,6 +188,9 @@ class SettingsDialog(QDialog):
         note = QLabel("선택한 파일에서 실행할 수 없는 기능은 팝업에서 비활성화됩니다.")
         note.setWordWrap(True)
         form.addRow(note)
+        reset_menu = QPushButton("모든 유형 기본값으로")
+        reset_menu.clicked.connect(self.reset_quick_menu)
+        form.addRow(reset_menu)
         self.profile.currentIndexChanged.connect(self.load_directions)
         self.load_directions()
 
@@ -200,13 +231,19 @@ class SettingsDialog(QDialog):
         self.key.binding = ""
         self.key.setText(DEFAULT_HOTKEY)
 
+    def reset_quick_menu(self):
+        self.quick_menu = dict.fromkeys(self.quick_menu, "")
+        self.load_directions()
+
     def change_direction(self, key, action):
         self.quick_menu[self.profile.currentData(), key] = action
 
     def load_directions(self):
         for key, combo in self.direction_boxes.items():
             action = self.quick_menu[self.profile.currentData(), key]
+            blocked = combo.blockSignals(True)
             combo.setCurrentIndex(max(0, combo.findData(action)))
+            combo.blockSignals(blocked)
 
     def save(self):
         try:
@@ -231,12 +268,10 @@ class SettingsDialog(QDialog):
             }
             for key, value in values.items():
                 s.setValue(key, value)
+            s.remove("quick_menu")
             for (profile, key), action in self.quick_menu.items():
-                setting = f"quick_menu/{profile}/{key}"
                 if action:
-                    s.setValue(setting, action)
-                else:
-                    s.remove(setting)
+                    s.setValue(f"quick_menu/{profile}/{key}", action)
             s.sync()
             if hasattr(self.window, "watcher"):
                 self.window.watcher.update_settings(s)

@@ -3,20 +3,19 @@
 from pathlib import Path
 
 from .formats import CAD, HANCOM, IMAGES, PAGE_SPLIT_INPUTS, PRESENTATIONS, SPREADSHEETS, WORDS
-from .formats import SUPPORTED, can_convert
+from .formats import can_convert
 
 DIRECTIONS = {"pdf": "위", "png": "왼쪽", "jpeg": "오른쪽", "more": "아래"}
 PROFILES = {
-    "image": "이미지",
     "pdf": "PDF",
-    "hancom": "한글",
+    "image": "이미지",
+    "hancom": "한글 문서",
     "word": "Word",
-    "sheet": "스프레드시트",
-    "slides": "프레젠테이션",
+    "sheet": "Excel",
+    "slides": "PPT",
     "cad": "CAD 도면",
     "other": "기타 / 혼합",
 }
-PROFILE_CHOICES = {**PROFILES, **{ext: ext[1:].upper() for ext in sorted(SUPPORTED)}}
 ACTIONS = {
     "pdf": ("PDF 변환", "pdf"),
     "png": ("PNG 변환", "png"),

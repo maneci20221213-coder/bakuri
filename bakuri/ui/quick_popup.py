@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 from PySide6.QtCore import Qt, Signal, QTimer, QEvent, QPoint
-from PySide6.QtGui import QCursor
+from PySide6.QtGui import QCursor, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QGraphicsDropShadowEffect,
@@ -30,7 +30,7 @@ class QuickPopup(QWidget):
         self.settings = settings
         self.preparing = False
         self.setStyleSheet(
-            'QuickPopup {background:transparent;} QPushButton {background:rgba(255,255,255,225);color:#26354A;border:1px solid rgba(218,228,242,230);border-radius:12px;padding:0;} QPushButton:hover {background:rgba(239,246,255,245);border-color:#96C1F8;} QPushButton[selected="true"] {background:rgba(244,249,255,245);border:2px solid #2E83F2;} QLabel {background:transparent;border:0;color:#26354A;font-family:"Malgun Gothic","Noto Sans CJK KR",sans-serif;}'
+            'QuickPopup {background:transparent;} QPushButton {background:rgba(255,255,255,225);color:#26354A;border:1px solid rgba(218,228,242,230);border-radius:12px;padding:0;} QPushButton:hover {background:rgba(239,246,255,245);border-color:#96C1F8;} QPushButton[selected="true"] {background:rgba(244,249,255,245);border:2px solid #2E83F2;} QLabel {background:transparent;border:0;color:#26354A;font-family:"Malgun Gothic","Noto Sans CJK KR",sans-serif;} QPushButton:disabled {background:rgba(233,237,243,225);border-color:#d5dce5;} QLabel:disabled {color:#758195;}'
         )
 
         self.actions = {}
@@ -196,14 +196,8 @@ class QuickPopup(QWidget):
             labels["pdf"] = ACTIONS["pdf"]
             labels["png"] = ACTIONS["png"]
             labels["jpeg"] = ACTIONS["jpeg"]
-        overrides = [next(iter(extensions)), profile] if len(extensions) == 1 else [profile]
         for key in DIRECTIONS:
-            custom = ""
-            if self.settings:
-                for override in overrides:
-                    custom = self.settings.value(f"quick_menu/{override}/{key}", "")
-                    if custom in ACTIONS:
-                        break
+            custom = self.settings.value(f"quick_menu/{profile}/{key}", "") if self.settings else ""
             if custom in ACTIONS:
                 self.actions[key] = custom
                 labels[key] = ACTIONS[custom]
@@ -212,21 +206,13 @@ class QuickPopup(QWidget):
             if action == "pdf_split" and hancom:
                 asset = "hwpx"
             button = self.buttons[key]
-            button.setAccessibleName(label)
-            button.layout().itemAt(0).widget().setPixmap(icon(asset).pixmap(30, 32))
-            button.layout().itemAt(1).widget().setText(label)
             available = action_available(action, paths)
+            button.setAccessibleName(label)
+            mode = QIcon.Normal if available else QIcon.Disabled
+            button.layout().itemAt(0).widget().setPixmap(icon(asset).pixmap(30, 32, mode))
+            button.layout().itemAt(1).widget().setText(label)
             button.setEnabled(available)
             button.setToolTip("" if available else "선택한 파일에는 이 기능을 사용할 수 없습니다.")
-        if not any(self.buttons[key].isEnabled() for key in DIRECTIONS):
-            self.actions["more"] = "more"
-            button = self.buttons["more"]
-            label, asset = ACTIONS["more"]
-            button.setAccessibleName(label)
-            button.layout().itemAt(0).widget().setPixmap(icon(asset).pixmap(30, 32))
-            button.layout().itemAt(1).widget().setText(label)
-            button.setToolTip("")
-            button.setEnabled(True)
         self.buttons["hwpx"].setVisible(
             bool(paths) and all(Path(p).suffix.lower() == ".hwp" for p in paths)
         )
@@ -237,7 +223,7 @@ class QuickPopup(QWidget):
             bool(paths) and all(Path(p).suffix.lower() in IMAGES | {".pdf"} for p in paths)
         )
         self.note.setText(f"{len(paths)}개 파일 · 방향키 → Enter · Esc 닫기")
-        self.current = next(key for key in DIRECTIONS if self.buttons[key].isEnabled())
+        self.current = next((key for key in DIRECTIONS if self.buttons[key].isEnabled()), None)
         point = QCursor.pos()
         screen = QApplication.screenAt(point) or QApplication.primaryScreen()
         rect = screen.availableGeometry()
@@ -290,7 +276,8 @@ class QuickPopup(QWidget):
     def pick(self, key):
         if not self.isVisible() or self.motion.closing:
             return
-        if not self.buttons[key].isEnabled():
+        button = self.buttons.get(key)
+        if button is None or not button.isVisible() or not button.isEnabled():
             return
         action = self.actions.get(key, key)
         self.motion.close(lambda: self.chosen.emit(action))
@@ -350,7 +337,15 @@ class QuickPopup(QWidget):
             neighbors["pdf"][Qt.Key_Right] = "pdf_split"
             neighbors["jpeg"][Qt.Key_Up] = "pdf_split"
             neighbors["pdf_split"] = {Qt.Key_Left: "pdf", Qt.Key_Down: "jpeg"}
-        target = neighbors.get(self.current, {}).get(key)
+        if self.current is None:
+            target = {
+                Qt.Key_Up: "pdf",
+                Qt.Key_Down: "more",
+                Qt.Key_Left: "png",
+                Qt.Key_Right: "jpeg",
+            }[key]
+        else:
+            target = neighbors.get(self.current, {}).get(key)
         while target and not self.buttons[target].isEnabled():
             target = neighbors.get(target, {}).get(key)
         if target:
@@ -367,7 +362,9 @@ class QuickPopup(QWidget):
                 for k in ("pdf", "png", "hwpx", "xlsx", "compress", "jpeg", "pdf_split", "more")
                 if self.buttons[k].isVisible() and self.buttons[k].isEnabled()
             ]
-            self.select(visible[(visible.index(self.current) + 1) % len(visible)])
+            if visible:
+                index = visible.index(self.current) + 1 if self.current in visible else 0
+                self.select(visible[index % len(visible)])
         elif key in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space):
             self.pick(self.current)
         elif key == Qt.Key_Escape:

@@ -131,12 +131,17 @@ class HotkeyForegroundTests(unittest.TestCase):
                     'hotkey_binding': '75,17,16'
                 }.get(key, default)
                 watcher = module.SelectionWatcher(lambda _: None, lambda _: None, settings)
-                self.assertEqual(watcher.binding, (75, (17, 16)))
-                watcher.key_window = 456
-                watcher.intercepted.add(75)
-                watcher.pressed.add(75)
-                watcher.listener = Mock()
-                with patch.object(watcher, 'on_press', return_value=True) as activate:
-                    watcher.filter_event(0x100, types.SimpleNamespace(vkCode=75))
-                activate.assert_called_once()
-                watcher.listener.suppress_event.assert_called_once()
+                try:
+                    self.assertEqual(watcher.binding, (75, (17, 16)))
+                    watcher.key_window = 456
+                    watcher.intercepted.add(75)
+                    watcher.pressed.add(75)
+                    watcher.listener = Mock()
+                    with patch.object(watcher, 'on_press', return_value=True) as activate:
+                        watcher.filter_event(0x100, types.SimpleNamespace(vkCode=75))
+                    activate.assert_called_once()
+                    watcher.listener.suppress_event.assert_called_once()
+                finally:
+                    for handler in watcher.log.handlers[:]:
+                        handler.close()
+                        watcher.log.removeHandler(handler)

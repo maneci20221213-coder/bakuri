@@ -1,8 +1,5 @@
 name: Windows installer and GitHub Release
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/release.yml']
   workflow_dispatch:
     inputs:
       publish:
@@ -17,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Publish Bakuri 1.0.4')
+    if: github.ref == 'refs/heads/main'
     runs-on: windows-2022
     timeout-minutes: 40
     permissions:
@@ -25,7 +22,7 @@ jobs:
     env:
       QT_QPA_PLATFORM: offscreen
       BAKURI_DISABLE_SHELL_INTEGRATION: '1'
-      BAKURI_RELEASE_TARGET: 315ec0eb7b4cf1dd32364b53b35b013133460fed
+      BAKURI_RELEASE_TARGET: ${{ github.sha }}
       BAKURI_REPOSITORY_URL: https://github.com/${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
@@ -35,9 +32,6 @@ jobs:
         with:
           python-version: '3.12'
           architecture: x64
-      - name: Use clean release workflow in source archive
-        shell: pwsh
-        run: git checkout $env:BAKURI_RELEASE_TARGET -- .github/workflows/release.yml
       - name: Read app version
         id: app
         shell: pwsh
@@ -73,7 +67,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BAKURI_VERSION: ${{ steps.app.outputs.version }}
-          BAKURI_PUBLISH: ${{ github.event_name == 'push' && 'true' || inputs.publish }}
+          BAKURI_PUBLISH: ${{ inputs.publish }}
         run: |
           $Tag="v$env:BAKURI_VERSION"
           $PreRelease=$env:BAKURI_VERSION.Contains('-')

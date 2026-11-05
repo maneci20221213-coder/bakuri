@@ -52,11 +52,11 @@ def bundled_converter():
     return Path(__file__).resolve().parents[2] / "cad_tools" / "dwg2dxf.exe"
 
 
-def run_dwg_converter(args, converted, control, engine):
+def run_dwg_converter(args, converted, control, engine, cwd):
     try:
         process = subprocess.Popen(
             args,
-            cwd=Path(args[0]).parent,
+            cwd=cwd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
@@ -108,8 +108,16 @@ def read_dwg(source, control):
         staged = inputs / "drawing.dwg"
         converted = outputs / "drawing.dxf"
         copyfile(source, staged)
+        cwd = executable.parent
         if engine == "LibreDWG":
-            args = [str(executable), "-o", str(converted), str(staged)]
+            # The Windows build uses narrow C file APIs, so arguments stay ASCII.
+            cwd = Path(directory)
+            args = [
+                str(executable),
+                "-o",
+                str(converted.relative_to(cwd)),
+                str(staged.relative_to(cwd)),
+            ]
         else:
             args = [
                 str(executable),
@@ -121,7 +129,7 @@ def read_dwg(source, control):
                 "0",
                 staged.name,
             ]
-        run_dwg_converter(args, converted, control, engine)
+        run_dwg_converter(args, converted, control, engine, cwd)
         return ezdxf.readfile(converted)
 
 

@@ -19,14 +19,16 @@ with (
     patch("bakuri.conversion.cad.bundled_converter", return_value=tools / "dwg2dxf.exe"),
     patch("bakuri.conversion.cad.find_oda", side_effect=AssertionError("Unexpected ODA lookup")),
 ):
-    folder = Path(directory)
+    folder = Path(directory) / "한글 경로"
+    folder.mkdir()
     for version in ("2000", "2018"):
         drawing = folder / f"도면_{version}.dwg"
         fixture = archive.extractfile(f"libredwg-0.14/test/test-data/example_{version}.dwg")
         original = fixture.read()
         drawing.write_bytes(original)
         for kind in ("pdf", "png", "jpeg"):
-            output = Path(convert([drawing], kind, dpi=96)[0])
+            with patch("tempfile.tempdir", str(folder)):
+                output = Path(convert([drawing], kind, dpi=96)[0])
             if kind == "pdf":
                 with fitz.open(output) as pdf:
                     assert len(pdf) == 1 and len(pdf[0].get_drawings()) > 1

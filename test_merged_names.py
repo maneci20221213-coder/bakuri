@@ -36,7 +36,7 @@ class FolderMergeNamesTests(unittest.TestCase):
             output = Path(
                 convert(paths, "pdf", True, output_mode="custom", output_folder=str(target))[0]
             )
-            self.assertEqual(output, target / "설계도면_통합본.pdf")
+            self.assertEqual(output, target.resolve() / "설계도면_통합본.pdf")
             with fitz.open(output) as pdf:
                 self.assertEqual(len(pdf), 2)
             self.assertEqual([path.read_bytes() for path in paths], original)

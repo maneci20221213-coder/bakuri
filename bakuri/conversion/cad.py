@@ -206,6 +206,10 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
         return None
 
     class KoreanRenderContext(RenderContext):
+        def default_lineweight(self):
+            # Unspecified strokes should remain thin when the drawing hides lineweights.
+            return 0.25 if document.header.get("$LWDISPLAY", 0) else 0.05
+
         def resolve_font(self, entity):
             original = super().resolve_font(entity)
             plain_text = getattr(entity, "plain_text", None)
@@ -232,6 +236,11 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
             return resolved
 
     class KoreanFrontend(UniversalFrontend):
+        def draw_entity(self, entity, properties):
+            if control:
+                control.check()
+            super().draw_entity(entity, properties)
+
         def draw_complex_mtext(self, mtext, properties):
             def replace_font(match):
                 run = re.split(r"[{}]|\\[fF]", mtext.text[match.end() :], maxsplit=1)[0]
@@ -248,7 +257,50 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
                 mtext.text = corrected
             super().draw_complex_mtext(mtext, properties)
 
-    backend = pymupdf.PyMuPdfBackend()
+    class PrintRenderBackend(pymupdf.PyMuPdfRenderBackend):
+        def resolve_stroke_width(self, width):
+            # ezdxf resolves entity/layer weights in mm, using 0.01 mm for zero.
+            return width * pymupdf.MM_TO_POINTS
+
+    class PrintRecorder(pymupdf.PyMuPdfBackend):
+        def __init__(self):
+            super().__init__()
+            self.lines = []
+            self.line_style = None
+
+        def draw_line(self, start, end, properties):
+            # Batch adjacent independent opaque strokes of the same style.
+            # Flush on shared endpoints to preserve the original line caps.
+            if properties.color[7:9].lower() not in {"", "ff"}:
+                super().draw_line(start, end, properties)
+                return
+            if self.lines and (
+                self.line_style[:4] != properties[:4]
+                or self.lines[-1][1] == start
+                or len(self.lines) >= 256
+            ):
+                self.flush_lines()
+            self.line_style = properties
+            self.lines.append((start, end))
+
+        def flush_lines(self):
+            if self.lines:
+                lines, self.lines = self.lines, []
+                super().draw_solid_lines(lines, self.line_style)
+
+        def store(self, record, properties):
+            self.flush_lines()
+            super().store(record, properties)
+
+        def finalize(self):
+            self.flush_lines()
+            super().finalize()
+
+        @staticmethod
+        def make_backend(page, settings):
+            return PrintRenderBackend(page, settings)
+
+    backend = PrintRecorder()
     KoreanFrontend(
         KoreanRenderContext(document),
         PrintPipeline(backend),
@@ -274,11 +326,9 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
         pdf.save(
             dest,
             garbage=4,
-            clean=True,
             deflate=True,
             deflate_images=True,
             deflate_fonts=True,
             use_objstms=1,
-            compression_effort=100,
         )
     advance(0.8)

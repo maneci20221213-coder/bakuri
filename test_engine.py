@@ -121,7 +121,27 @@ class CadConversionTests(unittest.TestCase):
    self.assertLess(result.stat().st_size,len(baseline))
    with fitz.open(result) as pdf:
     self.assertGreater(pdf[0].rect.height,pdf[0].rect.width)
-    self.assertGreaterEqual(len(pdf[0].get_drawings()),500)
+    self.assertEqual(sum(item[0]=='l' for drawing in pdf[0].get_drawings() for item in drawing['items']),500)
+
+ def test_cad_explicit_and_inherited_lineweights_keep_their_widths(self):
+  import ezdxf
+  with tempfile.TemporaryDirectory() as folder:
+   source=Path(folder)/'lineweights.dxf'
+   doc=ezdxf.new()
+   doc.layers.new('thin',dxfattribs={'lineweight':13})
+   model=doc.modelspace()
+   model.add_line((0,0),(100,0),dxfattribs={'lineweight':0})
+   model.add_line((0,10),(100,10),dxfattribs={'layer':'thin'})
+   model.add_line((0,20),(100,20),dxfattribs={'lineweight':35})
+   model.add_line((0,30),(100,30))
+   for display in (0,1):
+    doc.header['$LWDISPLAY']=display
+    doc.saveas(source)
+    with fitz.open(convert([source],'pdf')[0]) as pdf:
+     widths=[path['width'] for path in pdf[0].get_drawings() if path['type']=='s']
+     self.assertEqual(len(widths),4)
+     for width,mm in zip(widths,(0.01,0.13,0.35,0.25 if display else 0.05)):
+      self.assertAlmostEqual(width,mm*72/25.4,places=5)
 
  def test_cad_text_with_missing_font_matches_installed_korean_font(self):
   import ezdxf

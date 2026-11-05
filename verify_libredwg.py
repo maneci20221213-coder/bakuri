@@ -17,7 +17,7 @@ with (
     TemporaryDirectory() as directory,
     tarfile.open(source) as archive,
     patch("bakuri.conversion.cad.bundled_converter", return_value=tools / "dwg2dxf.exe"),
-    patch("bakuri.conversion.cad.find_oda", side_effect=AssertionError("Unexpected ODA lookup")),
+    patch("bakuri.conversion.cad.find_oda", return_value=None),
 ):
     folder = Path(directory) / "한글 경로"
     folder.mkdir()

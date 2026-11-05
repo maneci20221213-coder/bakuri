@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+import re
 from shutil import copyfile
 import subprocess
 from tempfile import TemporaryDirectory
@@ -88,17 +89,32 @@ def run_dwg_converter(args, converted, control, engine, cwd):
 def read_dwg(source, control):
     import ezdxf
 
+    oda = find_oda()
     bundled = bundled_converter()
+    converters = []
+    if oda is not None:
+        converters.append(("ODA File Converter", oda))
     if bundled.is_file():
-        executable = bundled
-        engine = "LibreDWG"
-    else:
-        executable = find_oda()
-        engine = "ODA File Converter"
-        if executable is None:
-            raise CadError(
-                "DWG 변환 도구가 없습니다. 바꾸리 설치 파일을 다시 받거나 DXF로 저장해 주세요."
-            )
+        converters.append(("LibreDWG", bundled))
+    if not converters:
+        raise CadError(
+            "DWG 변환 도구가 없습니다. 바꾸리 설치 파일을 다시 받거나 DXF로 저장해 주세요."
+        )
+
+    for index, (engine, executable) in enumerate(converters):
+        if control:
+            control.check()
+        try:
+            return convert_dwg_with(source, control, engine, executable)
+        except (CadError, ezdxf.DXFError):
+            if index + 1 == len(converters):
+                raise
+            if control:
+                control.notes.append("ODA에서 도면을 읽지 못해 LibreDWG로 다시 시도했습니다.")
+
+
+def convert_dwg_with(source, control, engine, executable):
+    import ezdxf
 
     with TemporaryDirectory(prefix="BakuriCAD-") as directory:
         inputs = Path(directory, "in")
@@ -137,7 +153,9 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
     import ezdxf
     from functools import lru_cache
     from ezdxf.fonts import fonts
-    from ezdxf.addons.drawing import Frontend, RenderContext, config, layout, pymupdf
+    from ezdxf.addons.drawing import RenderContext, config, layout, pymupdf
+    from ezdxf.addons.drawing.frontend import UniversalFrontend
+    from ezdxf.addons.drawing.pipeline import RenderPipeline2d
 
     advance(0.1)
     try:
@@ -162,42 +180,81 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
         except fonts.FontNotFoundError:
             return {}
 
+    def korean_characters(text):
+        return {
+            code
+            for code in map(ord, text)
+            if 0x1100 <= code <= 0x11FF
+            or 0x3130 <= code <= 0x318F
+            or 0xAC00 <= code <= 0xD7AF
+            or 0x4E00 <= code <= 0x9FFF
+        }
+
+    def supports(face, required):
+        return face is not None and required <= glyphs(Path(face.filename).name).keys()
+
+    def fallback_face(required):
+        for name in (
+            "malgun.ttf",
+            "malgunbd.ttf",
+            "gulim.ttc",
+            "batang.ttc",
+            "NotoSansCJK-Regular.ttc",
+        ):
+            if required <= glyphs(name).keys():
+                return manager.get_font_face(name)
+        return None
+
     class KoreanRenderContext(RenderContext):
         def resolve_font(self, entity):
             original = super().resolve_font(entity)
             plain_text = getattr(entity, "plain_text", None)
-            if not callable(plain_text):
+            required = korean_characters(plain_text()) if callable(plain_text) else set()
+            if not required or supports(original, required):
                 return original
-            required = {
-                code
-                for code in map(ord, plain_text())
-                if 0x1100 <= code <= 0x11FF
-                or 0x3130 <= code <= 0x318F
-                or 0xAC00 <= code <= 0xD7AF
-                or 0x4E00 <= code <= 0x9FFF
-            }
-            if not required or (
-                original and required <= glyphs(Path(original.filename).name).keys()
-            ):
-                return original
-            for name in (
-                "malgun.ttf",
-                "malgunbd.ttf",
-                "gulim.ttc",
-                "batang.ttc",
-                "NotoSansCJK-Regular.ttc",
-            ):
-                if required <= glyphs(name).keys():
-                    return manager.get_font_face(name)
-            return original
+            return fallback_face(required) or original
+
+    class PrintPipeline(RenderPipeline2d):
+        preserve_white_fill = False
+
+        def draw_filled_polygon(self, points, properties):
+            # WIPEOUT and MTEXT masks use filled polygons in the canvas color.
+            self.preserve_white_fill = properties.color[:7].lower() == "#ffffff"
+            try:
+                super().draw_filled_polygon(points, properties)
+            finally:
+                self.preserve_white_fill = False
+
+        def get_backend_properties(self, properties):
+            resolved = super().get_backend_properties(properties)
+            if self.preserve_white_fill:
+                return resolved._replace(color=properties.color)
+            return resolved
+
+    class KoreanFrontend(UniversalFrontend):
+        def draw_complex_mtext(self, mtext, properties):
+            def replace_font(match):
+                run = re.split(r"[{}]|\\[fF]", mtext.text[match.end() :], maxsplit=1)[0]
+                required = korean_characters(run)
+                if not required or supports(fonts.find_best_match(family=match[2]), required):
+                    return match[0]
+                fallback = fallback_face(required)
+                return f"\\{match[1]}{fallback.family}{match[3]};" if fallback else match[0]
+
+            # MTEXT font codes can override the corrected DXF text style.
+            corrected = re.sub(r"(?<!\\)\\([fF])([^;|{}]+)([^;{}]*);", replace_font, mtext.text)
+            if corrected != mtext.text:
+                mtext = mtext.copy()
+                mtext.text = corrected
+            super().draw_complex_mtext(mtext, properties)
 
     backend = pymupdf.PyMuPdfBackend()
-    Frontend(
+    KoreanFrontend(
         KoreanRenderContext(document),
-        backend,
+        PrintPipeline(backend),
         config.Configuration(
             background_policy=config.BackgroundPolicy.WHITE,
-            color_policy=config.ColorPolicy.COLOR_SWAP_BW,
+            color_policy=config.ColorPolicy.BLACK,
         ),
     ).draw_layout(document.modelspace())
     if control:

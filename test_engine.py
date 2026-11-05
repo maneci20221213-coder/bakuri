@@ -78,6 +78,34 @@ class CadConversionTests(unittest.TestCase):
     self.assertEqual(find_oda(),exe)
     self.assertTrue(Path(convert([source],'pdf')[0]).is_file())
 
+ def test_dwg_prefers_oda_then_falls_back_to_bundled_on_error(self):
+  from unittest.mock import patch
+  from bakuri.application.control import JobControl
+  from bakuri.conversion.cad import CadError,read_dwg
+  with tempfile.TemporaryDirectory() as folder:
+   root=Path(folder);oda=root/'ODAFileConverter.exe';bundled=root/'dwg2dxf.exe';bundled.touch()
+   source=root/'drawing.dwg';control=JobControl();drawing=object()
+   with patch('bakuri.conversion.cad.find_oda',return_value=oda),patch('bakuri.conversion.cad.bundled_converter',return_value=bundled),patch('bakuri.conversion.cad.convert_dwg_with',side_effect=[drawing,CadError('oda failed'),drawing]) as run:
+    self.assertIs(read_dwg(source,control),drawing)
+    run.assert_called_once_with(source,control,'ODA File Converter',oda)
+    self.assertIs(read_dwg(source,control),drawing)
+    self.assertEqual([call.args[2] for call in run.call_args_list],['ODA File Converter','ODA File Converter','LibreDWG'])
+    self.assertIn('LibreDWG',control.notes[0])
+
+ def test_cad_colored_lines_print_black_on_white(self):
+  import ezdxf
+  with tempfile.TemporaryDirectory() as folder:
+   source=Path(folder)/'colors.dxf'
+   doc=ezdxf.new();doc.modelspace().add_line((0,0),(80,50),dxfattribs={'color':1})
+   doc.modelspace().add_line((0,50),(80,0),dxfattribs={'color':3})
+   doc.modelspace().add_wipeout([(10,10),(20,10),(20,20),(10,20)])
+   doc.saveas(source)
+   with fitz.open(convert([source],'pdf')[0]) as pdf:
+    strokes=[drawing['color'] for drawing in pdf[0].get_drawings() if drawing.get('color')]
+    self.assertEqual(strokes,[(0.0,0.0,0.0)]*2)
+    self.assertTrue(any(drawing.get('fill')==(1.0,1.0,1.0) for drawing in pdf[0].get_drawings()))
+    self.assertEqual(pdf[0].get_pixmap().pixel(0,0),(255,255,255))
+
  def test_cad_pdf_is_compressed_and_keeps_vector_geometry(self):
   import ezdxf
   from ezdxf.addons.drawing import Frontend,RenderContext,layout,pymupdf
@@ -113,6 +141,23 @@ class CadConversionTests(unittest.TestCase):
      pix=pdf[0].get_pixmap()
      images.append(pix.samples)
    self.assertEqual(images[0],images[1])
+
+ def test_inline_mtext_uses_korean_font_without_losing_layout_codes(self):
+  import ezdxf
+  from ezdxf.fonts import fonts
+  manager=fonts.font_manager
+  name=next((candidate for candidate in ('malgun.ttf','malgunbd.ttf','gulim.ttc','batang.ttc','NotoSansCJK-Regular.ttc') if manager.has_font(candidate)),None)
+  if not name:self.skipTest('No Korean CAD fallback font installed')
+  with tempfile.TemporaryDirectory() as folder:
+   renders=[]
+   for index,family in enumerate(('Missing CAD Font',manager.get_font_face(name).family)):
+    source=Path(folder)/f'inline-{index}.dxf'
+    doc=ezdxf.new()
+    doc.modelspace().add_mtext(r'{\f'+family+r'|b0|i0;한글}\P치수',dxfattribs={'char_height':5,'width':40})
+    doc.saveas(source)
+    with fitz.open(convert([source],'pdf')[0]) as pdf:
+     renders.append(pdf[0].get_pixmap().samples)
+   self.assertEqual(renders[0],renders[1])
 
 
 class ConversionDestinationTests(unittest.TestCase):

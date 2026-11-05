@@ -5,7 +5,7 @@ import tempfile
 from PIL import Image
 import fitz
 from image_inputs import frames, white_rgb, save_png
-from bakuri.domain.formats import IMAGES, HANCOM, SUPPORTED, can_convert, can_merge
+from bakuri.domain.formats import IMAGES, HANCOM, CAD, SUPPORTED, can_convert, can_merge
 from bakuri.application.control import JobControl
 from merged_names import merged_path
 from .office import OfficeSession
@@ -84,9 +84,17 @@ def convert(
             control.check()
             results.append(publish(temp, merged_path(files, "hwpx", source_folders=source_folders)))
         else:
+            weights = (
+                [max(1, p.stat().st_size) for p in files]
+                if all(p.suffix.lower() in CAD for p in files)
+                else [1] * len(files)
+            )
+            total_weight = sum(weights)
+            completed_weight = 0
             for index, src in enumerate(files):
-                base = index * 90 / len(files)
-                width = 90 / len(files)
+                base = completed_weight * 90 / total_weight
+                width = weights[index] * 90 / total_weight
+                completed_weight += weights[index]
 
                 def advance(fraction, text=""):
                     control.update(base + width * min(0.98, fraction), text or src.name)
@@ -134,7 +142,15 @@ def convert(
                             pdf,
                             session,
                             control,
-                            advance,
+                            (
+                                (
+                                    lambda fraction, text="": advance(
+                                        fraction * (0.94 if fmt == "pdf" else 0.35), text
+                                    )
+                                )
+                                if src.suffix.lower() in CAD
+                                else advance
+                            ),
                             orientation=orientation if fmt == "pdf" else "auto",
                         )
                     control.check()

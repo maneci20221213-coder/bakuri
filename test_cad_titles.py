@@ -79,3 +79,31 @@ class CadTitleTests(unittest.TestCase):
                     renders.append(pdf[0].get_pixmap().samples)
                 self.assertEqual(source.read_bytes(), original)
             self.assertEqual(renders[0], renders[1])
+
+    def test_nested_inline_font_is_checked_against_a_known_korean_font(self):
+        from ezdxf.fonts import fonts
+
+        manager = fonts.font_manager
+        name = next(
+            (
+                n
+                for n in ("malgun.ttf", "gulim.ttc", "NotoSansCJK-Regular.ttc")
+                if manager.has_font(n)
+            ),
+            None,
+        )
+        if name is None:
+            self.skipTest("No Korean font installed")
+        family = manager.get_font_face(name).family
+        with tempfile.TemporaryDirectory() as directory:
+            renders = []
+            for index, face in enumerate(("Arial", family)):
+                doc = ezdxf.new()
+                # Font command precedes a nested group, where the old look-ahead stopped.
+                content = r"\f" + face + r"|b0|i0;{\H0.7x;\U+B3C4 \U+BA74 \U+BA85}\P{\W0.8;날 짜}"
+                doc.modelspace().add_mtext(content, dxfattribs={"char_height": 5, "width": 60})
+                source = Path(directory) / f"nested-{index}.dxf"
+                doc.saveas(source)
+                with fitz.open(convert([source], "pdf")[0]) as pdf:
+                    renders.append(pdf[0].get_pixmap().samples)
+            self.assertEqual(renders[0], renders[1])

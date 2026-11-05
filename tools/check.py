@@ -11,6 +11,7 @@ GROUPS = {
     "convert": [
         "test_engine",
         "test_cad_titles",
+        "test_cad_work",
         "test_images",
         "test_conversion_fixes",
         "test_pdf_pages",

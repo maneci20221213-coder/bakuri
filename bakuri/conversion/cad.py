@@ -164,12 +164,26 @@ def convert_dwg_with(source, control, engine, executable):
 def cad_to_pdf(source, dest, control, advance, orientation="auto"):
     import ezdxf
     from functools import lru_cache
+    from copy import copy
+    from ezdxf.addons.drawing.mtext_complex import ComplexMTextRenderer
+    from ezdxf.addons.drawing.recorder import Player
+    from ezdxf.tools import text_layout
     from ezdxf.fonts import fonts
     from ezdxf.addons.drawing import RenderContext, config, layout, pymupdf
     from ezdxf.addons.drawing.frontend import UniversalFrontend
     from ezdxf.addons.drawing.pipeline import RenderPipeline2d
+    from ezdxf.addons.drawing.unified_text_renderer import UnifiedTextRenderer
 
-    advance(0.1)
+    def report(fraction, stage, done=0, total=0):
+        advance(fraction)
+        if control:
+            control.update(
+                control.percent,
+                f"{source.name} · {stage}" + (f" · {done:,}/{total:,}개" if total else ""),
+            )
+            control.measure_units(done, total, f"{source} · {stage}")
+
+    report(0.05, "CAD 도면 읽기")
     try:
         document = (
             read_dwg(source, control) if source.suffix.lower() == ".dwg" else ezdxf.readfile(source)
@@ -180,7 +194,7 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
         ) from error
     if control:
         control.check()
-    advance(0.2)
+    report(0.2, "도면 구성 확인")
     manager = fonts.font_manager
 
     @lru_cache(maxsize=None)
@@ -188,7 +202,8 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
         if not manager.has_font(name) or Path(name).suffix.lower() not in {".ttf", ".ttc", ".otf"}:
             return {}
         try:
-            return manager.get_ttf_font(name).getBestCmap() or {}
+            cmap = manager.get_ttf_font(name).getBestCmap() or {}
+            return {code: glyph for code, glyph in cmap.items() if glyph != ".notdef"}
         except fonts.FontNotFoundError:
             return {}
 
@@ -203,9 +218,15 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
         }
 
     def supports(face, required):
+        if face is not None and not face.filename and face.family:
+            face = fonts.find_best_match(family=face.family, weight=face.weight)
         return face is not None and required <= glyphs(Path(face.filename).name).keys()
 
+    rescanned_fonts = False
+
+    @lru_cache(maxsize=256)
     def fallback_face(required):
+        nonlocal rescanned_fonts
         for name in (
             "malgun.ttf",
             "malgunbd.ttf",
@@ -215,7 +236,42 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
         ):
             if required <= glyphs(name).keys():
                 return manager.get_font_face(name)
-        return None
+        if os.name == "nt" and not rescanned_fonts:
+            rescanned_fonts = True
+            # Frozen builds may inherit a cache whose paths do not exist on this PC.
+            manager.build(
+                [str(Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts")], support_dirs=False
+            )
+            glyphs.cache_clear()
+            return fallback_face.__wrapped__(required)
+        raise CadError(
+            "한글을 표시할 글꼴을 찾지 못했습니다. Windows에 맑은 고딕 글꼴을 설치한 뒤 다시 시도해 주세요."
+        )
+
+    def checked_face(face, text):
+        required = frozenset(korean_characters(text))
+        return fallback_face(required) if required and not supports(face, required) else face
+
+    class KoreanMTextRenderer(ComplexMTextRenderer):
+        def __init__(self, *args):
+            super().__init__(*args)
+            self.word_faces = {}
+
+        def word(self, text, ctx):
+            face = checked_face(ctx.font_face, text)
+            self.word_faces[hash(ctx)] = face
+            if face != ctx.font_face:
+                ctx = copy(ctx)
+                ctx.font_face = face
+            # Use the same font for measuring widths and drawing the actual glyphs.
+            return super().word(text, ctx)
+
+        def space_width(self, ctx):
+            face = self.word_faces.get(hash(ctx), ctx.font_face)
+            if face != ctx.font_face:
+                ctx = copy(ctx)
+                ctx.font_face = face
+            return super().space_width(ctx)
 
     class KoreanRenderContext(RenderContext):
         def default_lineweight(self):
@@ -232,10 +288,21 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
             )
             if not required or supports(original, required):
                 return original
-            return fallback_face(required) or original
+            return fallback_face(frozenset(required))
 
     class PrintPipeline(RenderPipeline2d):
         preserve_white_fill = False
+
+        def __init__(self, backend):
+            super().__init__(backend)
+            self.text_engine = UnifiedTextRenderer()
+
+        def draw_text(self, text, transform, properties, cap_height, dxftype="TEXT"):
+            face = checked_face(properties.font, text)
+            if face != properties.font:
+                properties = copy(properties)
+                properties.font = face
+            super().draw_text(text, transform, properties, cap_height, dxftype)
 
         def draw_filled_polygon(self, points, properties):
             # WIPEOUT and MTEXT masks use filled polygons in the canvas color.
@@ -251,11 +318,48 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
                 return resolved._replace(color=properties.color)
             return resolved
 
+    block_weights = {}
+
+    def block_weight(name, ancestors=()):
+        if name in ancestors or len(ancestors) > 32:
+            return 0
+        if name not in block_weights:
+            block = document.blocks.get(name)
+            block_weights[name] = (
+                sum(entity_weight(e, ancestors + (name,)) for e in block) if block else 0
+            )
+        return block_weights[name]
+
+    def entity_weight(entity, ancestors=()):
+        if entity.dxftype() == "INSERT":
+            return 1 + entity.mcount * (
+                block_weight(entity.dxf.name, ancestors) + len(entity.attribs)
+            )
+        if entity.dxftype() == "DIMENSION":
+            return 1 + block_weight(entity.dxf.get("geometry", ""), ancestors)
+        return 1
+
+    entity_total = max(1, sum(entity_weight(e) for e in document.modelspace()))
+    entity_done = 0
+    report(0.22, "도면 그리기", 0, entity_total)
+
+    def rendered_entity():
+        nonlocal entity_done
+        entity_done += 1
+        if entity_done % max(1, entity_total // 100) == 0:
+            done = min(entity_done, entity_total)
+            report(0.22 + 0.4 * done / entity_total, "도면 그리기", done, entity_total)
+
     class KoreanFrontend(UniversalFrontend):
         def draw_entity(self, entity, properties):
             if control:
                 control.check()
             super().draw_entity(entity, properties)
+            rendered_entity()
+
+        def skip_entity(self, entity, msg):
+            super().skip_entity(entity, msg)
+            rendered_entity()
 
         def draw_text_entity(self, entity, properties):
             # Attribute values inside INSERT title blocks also take this route.
@@ -264,6 +368,10 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
             if corrected != text:
                 entity = entity.copy()
                 entity.dxf.text = corrected
+            face = checked_face(properties.font, corrected)
+            if face != properties.font:
+                properties = copy(properties)
+                properties.font = face
             super().draw_text_entity(entity, properties)
 
         def draw_mtext_entity(self, entity, properties):
@@ -271,23 +379,37 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
             if corrected != entity.text:
                 entity = entity.copy()
                 entity.text = corrected
+            face = checked_face(properties.font, corrected)
+            if face != properties.font:
+                properties = copy(properties)
+                properties.font = face
             super().draw_mtext_entity(entity, properties)
 
         def draw_complex_mtext(self, mtext, properties):
-            def replace_font(match):
-                run = re.split(r"[{}]|\\[fF]", mtext.text[match.end() :], maxsplit=1)[0]
-                required = korean_characters(run)
-                if not required or supports(fonts.find_best_match(family=match[2]), required):
-                    return match[0]
-                fallback = fallback_face(required)
-                return f"\\{match[1]}{fallback.family}{match[3]};" if fallback else match[0]
+            renderer = KoreanMTextRenderer(self.ctx, self.pipeline, properties)
+            engine = renderer.layout_engine(mtext)
+            engine.place(align=text_layout.LayoutAlignment(mtext.dxf.attachment_point))
+            engine.render(mtext.ucs().matrix)
 
-            # MTEXT font codes can override the corrected DXF text style.
-            corrected = re.sub(r"(?<!\\)\\([fF])([^;|{}]+)([^;{}]*);", replace_font, mtext.text)
-            if corrected != mtext.text:
-                mtext = mtext.copy()
-                mtext.text = corrected
-            super().draw_complex_mtext(mtext, properties)
+    class ProgressPlayer(Player):
+        tracking = False
+
+        def replay(self, backend, override=None):
+            self.tracking = True
+            report(0.68, "PDF 구성", 0, len(self.records))
+            try:
+                super().replay(backend, override)
+            finally:
+                self.tracking = False
+
+        def recordings(self):
+            total = max(1, len(self.records))
+            for index, item in enumerate(super().recordings(), 1):
+                if control:
+                    control.check()
+                yield item
+                if self.tracking and (index % max(1, total // 100) == 0 or index == total):
+                    report(0.68 + 0.24 * index / total, "PDF 구성", index, total)
 
     class PrintRenderBackend(pymupdf.PyMuPdfRenderBackend):
         def resolve_stroke_width(self, width):
@@ -299,6 +421,15 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
             super().__init__()
             self.lines = []
             self.line_style = None
+
+        def player(self):
+            player = ProgressPlayer()
+            player.config = self.config
+            player.background = self.background
+            player.records = self.records
+            player.properties = self.properties
+            player.has_shared_recordings = True
+            return player
 
         def draw_line(self, start, end, properties):
             # Batch adjacent independent opaque strokes of the same style.
@@ -343,6 +474,7 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
     ).draw_layout(document.modelspace())
     if control:
         control.check()
+    report(0.63, "PDF 용지 배치")
     bounds = backend.player().bbox()
     if not bounds.has_data:
         raise CadError("도면의 모형 공간에 변환할 내용이 없습니다.")
@@ -355,6 +487,7 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
     with backend.get_replay(page, render_box=bounds).doc as pdf:
         if control:
             control.check()
+        report(0.94, "PDF 압축 및 저장")
         pdf.save(
             dest,
             garbage=4,
@@ -363,4 +496,4 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
             deflate_fonts=True,
             use_objstms=1,
         )
-    advance(0.8)
+    report(1.0, "CAD 변환 완료")

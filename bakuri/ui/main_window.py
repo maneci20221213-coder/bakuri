@@ -86,6 +86,7 @@ class Window(QWidget):
         self.popup.chosen.connect(self.quick_selected)
         self.quick_paths = []
         self.bus.progress.connect(self.update_progress)
+        self.bus.measured.connect(self.update_work)
         self.files.paste_requested.connect(self.paste_files)
         QApplication.instance().installEventFilter(self)
         self.bus.message.connect(self.status.setText)
@@ -434,7 +435,7 @@ class Window(QWidget):
         self.popup.hide()
         self.busy = True
         self.job_kind = kind
-        self.control = JobControl(self.bus.progress.emit)
+        self.control = JobControl(self.bus.progress.emit, self.bus.measured.emit)
         control = self.control
         self.estimate = ProgressEstimate()
         self.stop_job.setToolTip("현재 작업만 중지합니다. 대기 작업은 이어서 처리합니다.")
@@ -461,6 +462,12 @@ class Window(QWidget):
             return
         self.estimate.update(percent, text)
         self.results.toast.set_progress(self.estimate.percent)
+        self.refresh_progress()
+
+    def update_work(self, done, total, stage):
+        if not self.busy or (self.control and self.control.cancelled.is_set()):
+            return
+        self.estimate.measure(done, total, stage)
         self.refresh_progress()
 
     def refresh_progress(self):

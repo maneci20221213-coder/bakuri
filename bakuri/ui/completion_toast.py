@@ -79,6 +79,7 @@ class CompletionToast(QWidget):
         self.timer.setSingleShot(True)
         self.timer.timeout.connect(self.hide)
         self.showing_progress = False
+        self.anchor = None
 
     def activate_action(self, action):
         self.hide()
@@ -109,16 +110,30 @@ class CompletionToast(QWidget):
         self.timer.start(12000)
 
     def place(self, tray_rect):
-        self.adjustSize()
-        position = (
+        self.anchor = (
             tray_rect.center() if tray_rect is not None and tray_rect.isValid() else QCursor.pos()
         )
-        screen = QApplication.screenAt(position) or QApplication.primaryScreen()
+        layout = self.layout()
+        layout.invalidate()
+        layout.activate()
+        # The content wraps at a fixed width; calculate the height at that width
+        # before anchoring, even when the previous card is still on screen.
+        self.resize(self.width(), layout.totalHeightForWidth(self.width()))
+        self.move_to_anchor()
+
+    def move_to_anchor(self):
+        if self.anchor is None:
+            return
+        screen = QApplication.screenAt(self.anchor) or QApplication.primaryScreen()
         area = screen.availableGeometry()
         self.move(
-            max(area.left(), area.right() - self.width() - 15),
-            max(area.top(), area.bottom() - self.height() - 15),
+            max(area.left(), area.right() + 1 - self.width() - 15),
+            max(area.top(), area.bottom() + 1 - self.height() - 15),
         )
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.move_to_anchor()
 
     def hideEvent(self, event):
         self.showing_progress = False

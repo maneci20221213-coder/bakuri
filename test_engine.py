@@ -55,3 +55,25 @@ class CadConversionTests(unittest.TestCase):
      with Image.open(result) as image:
       self.assertGreater(image.width,image.height)
    self.assertEqual(source.read_bytes(),original)
+
+ def test_dwg_uses_installed_oda_then_renders_dxf(self):
+  from unittest.mock import Mock,patch
+  import ezdxf,os
+  from bakuri.conversion.cad import find_oda
+  from bakuri.conversion.service import convert
+  with tempfile.TemporaryDirectory() as folder:
+   root=Path(folder)
+   exe=root/'Open Design Alliance'/'ODAFileConverter 26'/'ODAFileConverter.exe'
+   exe.parent.mkdir(parents=True);exe.touch()
+   source=root/'source.dwg';source.write_bytes(b'dwg fixture')
+   def start(args,**kwargs):
+    self.assertEqual(Path(args[0]),exe)
+    self.assertEqual(Path(args[1],'drawing.dwg').read_bytes(),source.read_bytes())
+    doc=ezdxf.new();doc.modelspace().add_line((0,0),(10,20))
+    doc.saveas(Path(args[2],'drawing.dxf'))
+    process=Mock(returncode=0);process.poll.return_value=0
+    process.__enter__=Mock(return_value=process);process.__exit__=Mock(return_value=False)
+    return process
+   with patch.dict(os.environ,{'ProgramFiles':str(root),'ProgramW6432':'','ProgramFiles(x86)':''}),patch('bakuri.conversion.cad.subprocess.Popen',side_effect=start):
+    self.assertEqual(find_oda(),exe)
+    self.assertTrue(Path(convert([source],'pdf')[0]).is_file())

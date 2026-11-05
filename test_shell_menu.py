@@ -18,7 +18,12 @@ class Registry:
   if path not in self.tree:raise FileNotFoundError(path)
   return Key(path)
  def SetValueEx(self,key,name,_,kind,value):self.tree[key.path][name]=value
- def QueryValueEx(self,key,name):return self.tree[key.path][name],1
+ def QueryValueEx(self,key,name):
+  if name not in self.tree[key.path]:raise FileNotFoundError(name)
+  return self.tree[key.path][name],1
+ def DeleteValue(self,key,name):
+  if name not in self.tree[key.path]:raise FileNotFoundError(name)
+  del self.tree[key.path][name]
  def EnumKey(self,key,index):
   children=sorted(p[len(key.path)+1:] for p in self.tree if p.startswith(key.path+'\\') and '\\' not in p[len(key.path)+1:])
   if index>=len(children):raise OSError('end')
@@ -64,3 +69,23 @@ class ShellMenuTests(unittest.TestCase):
    self.assertEqual(len([p for p in registry.tree if p.endswith('\\BakuriPythonTrial')]),len(SUPPORTED))
    self.assertFalse(module.migrate_menu(False))
    self.assertFalse(any(p.endswith('\\BakuriPythonTrial') for p in registry.tree))
+
+
+ def test_developer_registrations_are_separate_from_stable(self):
+  registry=Registry()
+  shell=types.SimpleNamespace(SHChangeNotify=lambda *args:None)
+  with patch.dict(sys.modules,{'winreg':registry}),patch.object(ctypes,'windll',types.SimpleNamespace(shell32=shell),create=True):
+   spec=importlib.util.spec_from_file_location('isolated_shell',Path(__file__).with_name('windows.py'))
+   module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+   module.set_startup(True)
+   module.register_menu(True)
+   module.set_startup(True,development=True)
+   module.register_menu(True,development=True)
+   self.assertTrue(module.startup_enabled(development=True))
+   self.assertTrue(any(key.endswith(r'\BakuriDevelopment') for key in registry.tree))
+   module.set_startup(False,development=True)
+   module.register_menu(False,development=True)
+   self.assertFalse(module.startup_enabled(development=True))
+   self.assertTrue(module.startup_enabled())
+   self.assertTrue(any(key.endswith(r'\BakuriPythonTrial') for key in registry.tree))
+   self.assertFalse(any(key.endswith(r'\BakuriDevelopment') for key in registry.tree))

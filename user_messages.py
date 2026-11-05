@@ -40,7 +40,10 @@ def log_error(error,context):
 
 def friendly_error(error,context='conversion'):
     text=str(error)
-    if isinstance(error,(PageSelectionError,CadError)) or text in MESSAGES.values():return text
+    if isinstance(error,PageSelectionError) or text in MESSAGES.values():return text
+    if isinstance(error,CadError):
+        log_error(error,context)
+        return text
     log_error(error,context)
     if context in {'startup','menu','settings','selection','update_check','update_download','update_install'}:
         return MESSAGES[context]

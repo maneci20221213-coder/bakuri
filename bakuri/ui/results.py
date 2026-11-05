@@ -94,7 +94,8 @@ class ResultsPresenter:
 
     def finished(self, result):
         window = self.window
-        if isinstance(result, JobReport):
+        validated_report = isinstance(result, JobReport)
+        if validated_report:
             result = dict(
                 paths=list(result.paths),
                 rows=[row.as_dict() for row in result.rows],
@@ -144,7 +145,7 @@ class ResultsPresenter:
         if outcome == "failed":
             summary += (
                 "\n"
-                + friendly_error(result.get("error", ""))
+                + (result["error"] if validated_report else friendly_error(result.get("error", "")))
                 + "\n원본과 이미 저장된 결과는 그대로 남아 있습니다."
             )
         window.show_completion(

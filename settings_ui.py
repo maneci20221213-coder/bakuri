@@ -1,5 +1,6 @@
 """Application preferences and their Windows integration."""
 
+import os
 import sys
 
 from PySide6.QtCore import QEvent, QKeyCombination, Qt, Signal
@@ -117,18 +118,21 @@ class SettingsDialog(QDialog):
         settings = window.settings
         form = page("일반")
         self.auto = QCheckBox("윈도우 로그인 시 백그라운드 실행")
-        self.auto.setChecked(settings.value("startup_enabled", True, type=bool))
-        self.auto.setEnabled(sys.platform == "win32" and not DEVELOPMENT)
-        if self.auto.isEnabled():
+        windows_available = sys.platform == "win32"
+        self.shell_integration = (
+            windows_available and os.environ.get("BAKURI_DISABLE_SHELL_INTEGRATION") != "1"
+        )
+        startup = settings.value("startup_enabled", not DEVELOPMENT, type=bool)
+        if self.shell_integration:
             from windows import startup_enabled
 
-            self.auto.setChecked(startup_enabled())
-        elif DEVELOPMENT:
-            self.auto.setChecked(False)
+            startup = startup_enabled(development=DEVELOPMENT)
+        self.auto.setChecked(startup)
+        self.auto.setEnabled(windows_available)
         form.addRow(self.auto)
         self.explorer = QCheckBox("탐색기 우클릭 메뉴 추가")
-        self.explorer.setChecked(not DEVELOPMENT and settings.value("explorer", True, type=bool))
-        self.explorer.setEnabled(not DEVELOPMENT)
+        self.explorer.setChecked(settings.value("explorer", not DEVELOPMENT, type=bool))
+        self.explorer.setEnabled(windows_available)
         form.addRow(self.explorer)
         self.notify = QCheckBox("작업 진행률 및 완료 알림")
         self.notify.setChecked(settings.value("notify", True, type=bool))
@@ -247,11 +251,11 @@ class SettingsDialog(QDialog):
 
     def save(self):
         try:
-            if sys.platform == "win32" and not DEVELOPMENT:
+            if self.shell_integration:
                 from windows import register_menu, set_startup
 
-                set_startup(self.auto.isChecked())
-                register_menu(self.explorer.isChecked())
+                set_startup(self.auto.isChecked(), development=DEVELOPMENT)
+                register_menu(self.explorer.isChecked(), development=DEVELOPMENT)
             s = self.window.settings
             values = {
                 "startup_enabled": self.auto.isChecked(),

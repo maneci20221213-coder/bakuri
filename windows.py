@@ -5,23 +5,26 @@ from pathlib import Path
 from build_channel import DEFAULT_HOTKEY
 RUN=r'Software\Microsoft\Windows\CurrentVersion\Run'
 NAME='Bakuri'
+DEVELOPMENT_NAME='BakuriDevelopment'
 KEYS={'` (백틱)':(0xC0,()),'F8':(0x77,()),'F9':(0x78,()),'Ctrl+Alt+B':(0x42,(0x11,0x12))}
-def startup_enabled():
+def startup_enabled(*, development=False):
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER,RUN) as key:
-        for name in (NAME,'Bakuri Python Trial','FileFlip'):
+        names = (DEVELOPMENT_NAME,) if development else (NAME, 'Bakuri Python Trial', 'FileFlip')
+        for name in names:
             try: winreg.QueryValueEx(key,name); return True
             except FileNotFoundError: pass
     return False
-def set_startup(enabled):
+def set_startup(enabled, *, development=False):
+    name = DEVELOPMENT_NAME if development else NAME
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER,RUN) as key:
         if enabled:
             exe=Path(sys.executable)
             args=[str(exe),'--background'] if getattr(sys,'frozen',False) else [str(exe.with_name('pythonw.exe')),str(Path(__file__).with_name('app.py')),'--background']
-            winreg.SetValueEx(key,NAME,0,winreg.REG_SZ,subprocess.list2cmdline(args))
+            winreg.SetValueEx(key,name,0,winreg.REG_SZ,subprocess.list2cmdline(args))
         else:
-            try: winreg.DeleteValue(key,NAME)
+            try: winreg.DeleteValue(key,name)
             except FileNotFoundError: pass
-        for legacy in ('Bakuri Python Trial','FileFlip'):
+        for legacy in (() if development else ('Bakuri Python Trial','FileFlip')):
             try: winreg.DeleteValue(key,legacy)
             except FileNotFoundError: pass
 class GUIINFO(ctypes.Structure):
@@ -269,19 +272,21 @@ def migrate_menu(enabled):
     register_menu(enabled)
     return enabled
 
-def register_menu(enabled):
+def register_menu(enabled, *, development=False):
     from bakuri.domain.formats import SUPPORTED
+    verb = r'\BakuriDevelopment' if development else r'\BakuriPythonTrial'
     for root in menu_roots():
-        delete_menu_key(root+r'\BakuriConvert')
-        delete_menu_key(root+r'\BakuriPythonTrial')
+        if not development:
+            delete_menu_key(root+r'\BakuriConvert')
+        delete_menu_key(root+verb)
     if enabled:
         executable=Path(sys.executable)
         if not getattr(sys,'frozen',False):executable=executable.with_name('pythonw.exe')
         args=[str(executable)] if getattr(sys,'frozen',False) else [str(executable),str(Path(__file__).with_name('app.py').resolve())]
         for ext in sorted(SUPPORTED):
-            path=r'Software\Classes\SystemFileAssociations'+chr(92)+ext+r'\shell\BakuriPythonTrial'
+            path=r'Software\Classes\SystemFileAssociations'+chr(92)+ext+r'\shell'+verb
             with winreg.CreateKey(winreg.HKEY_CURRENT_USER,path) as key:
-                winreg.SetValueEx(key,'',0,winreg.REG_SZ,'바꾸리 파일 변환')
+                winreg.SetValueEx(key,'',0,winreg.REG_SZ,'바꾸리 개발판 파일 변환' if development else '바꾸리 파일 변환')
                 winreg.SetValueEx(key,'MultiSelectModel',0,winreg.REG_SZ,'Player')
             with winreg.CreateKey(winreg.HKEY_CURRENT_USER,path+r'\command') as key:
                 winreg.SetValueEx(key,'',0,winreg.REG_SZ,subprocess.list2cmdline(args)+' --add-files "%1"')

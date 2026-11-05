@@ -12,15 +12,46 @@ class CadError(ValueError):
     """A CAD problem with a message the user can act on."""
 
 
+def find_oda():
+    candidates = []
+    if os.name == "nt":
+        import winreg
+
+        key = r"Software\Microsoft\Windows\CurrentVersion\App Paths\ODAFileConverter.exe"
+        for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+            for view in (winreg.KEY_WOW64_64KEY, winreg.KEY_WOW64_32KEY):
+                try:
+                    with winreg.OpenKey(hive, key, 0, winreg.KEY_READ | view) as entry:
+                        path, _ = winreg.QueryValueEx(entry, "")
+                        candidates.append(Path(os.path.expandvars(path.strip('"'))))
+                except (OSError, AttributeError, TypeError):
+                    continue
+    for variable in ("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"):
+        root = os.environ.get(variable)
+        if root:
+            folder = Path(root)
+            for vendor in (folder / "ODA", folder / "Open Design Alliance", folder):
+                if vendor != folder:
+                    candidates.append(vendor / "ODAFileConverter.exe")
+                for pattern in (
+                    "ODAFileConverter*/ODAFileConverter.exe",
+                    "ODA File Converter*/ODAFileConverter.exe",
+                ):
+                    candidates.extend(sorted(vendor.glob(pattern), reverse=True))
+    return next(
+        (
+            path
+            for path in candidates
+            if path.is_absolute() and path.name.lower() == "odafileconverter.exe" and path.is_file()
+        ),
+        None,
+    )
+
+
 def read_dwg(source, control):
     import ezdxf
 
-    executables = []
-    for variable in ("ProgramFiles", "ProgramFiles(x86)"):
-        root = os.environ.get(variable)
-        if root:
-            executables.extend(Path(root, "ODA").glob("ODAFileConverter*/ODAFileConverter.exe"))
-    executable = next((path for path in executables if path.is_file()), None)
+    executable = find_oda()
     if executable is None:
         raise CadError("DWG를 변환하려면 ODA File Converter를 설치하거나 DXF로 저장해 주세요.")
     with TemporaryDirectory(prefix="BakuriCAD-") as directory:
@@ -36,16 +67,22 @@ def read_dwg(source, control):
             "ACAD2018",
             "DXF",
             "0",
-            "1",
+            "0",
             "drawing.dwg",
         ]
-        with subprocess.Popen(
-            args,
-            cwd=executable.parent,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        ) as process:
+        try:
+            process = subprocess.Popen(
+                args,
+                cwd=executable.parent,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        except OSError as error:
+            raise CadError(
+                "ODA File Converter를 실행하지 못했습니다. ODA가 직접 실행되는지 확인해 주세요."
+            ) from error
+        with process:
             deadline = time.monotonic() + 120
             try:
                 while process.poll() is None:
@@ -61,7 +98,12 @@ def read_dwg(source, control):
                     process.kill()
         converted = outputs / "drawing.dxf"
         if process.returncode != 0 or not converted.is_file():
-            raise CadError("DWG 도면을 읽지 못했습니다. DXF로 저장한 뒤 다시 시도해 주세요.")
+            raise CadError(
+                "ODA File Converter가 DWG에서 DXF를 만들지 못했습니다. "
+                "ODA에서 도면이 열리는지 확인하거나 CAD 프로그램에서 DXF로 저장해 주세요."
+            ) from RuntimeError(
+                f"ODA exit code: {process.returncode}; DXF exists: {converted.is_file()}"
+            )
         return ezdxf.readfile(converted)
 
 

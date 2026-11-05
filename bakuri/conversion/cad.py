@@ -48,62 +48,80 @@ def find_oda():
     )
 
 
+def bundled_converter():
+    return Path(__file__).resolve().parents[2] / "cad_tools" / "dwg2dxf.exe"
+
+
+def run_dwg_converter(args, converted, control, engine):
+    try:
+        process = subprocess.Popen(
+            args,
+            cwd=Path(args[0]).parent,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except OSError as error:
+        raise CadError(f"{engine} DWG 변환 도구를 실행하지 못했습니다.") from error
+    with process:
+        deadline = time.monotonic() + 120
+        try:
+            while process.poll() is None:
+                if control:
+                    control.check()
+                if time.monotonic() >= deadline:
+                    raise CadError(
+                        "DWG 변환 시간이 초과됐습니다. DXF로 저장한 뒤 다시 시도해 주세요."
+                    )
+                time.sleep(0.1)
+        finally:
+            if process.poll() is None:
+                process.kill()
+    if process.returncode != 0 or not converted.is_file():
+        raise CadError(
+            f"{engine}에서 이 DWG를 읽지 못했습니다. CAD 프로그램에서 DXF로 저장한 뒤 다시 시도해 주세요."
+        ) from RuntimeError(
+            f"{engine} exit code: {process.returncode}; DXF exists: {converted.is_file()}"
+        )
+
+
 def read_dwg(source, control):
     import ezdxf
 
-    executable = find_oda()
-    if executable is None:
-        raise CadError("DWG를 변환하려면 ODA File Converter를 설치하거나 DXF로 저장해 주세요.")
+    bundled = bundled_converter()
+    if bundled.is_file():
+        executable = bundled
+        engine = "LibreDWG"
+    else:
+        executable = find_oda()
+        engine = "ODA File Converter"
+        if executable is None:
+            raise CadError(
+                "DWG 변환 도구가 없습니다. 바꾸리 설치 파일을 다시 받거나 DXF로 저장해 주세요."
+            )
+
     with TemporaryDirectory(prefix="BakuriCAD-") as directory:
         inputs = Path(directory, "in")
         outputs = Path(directory, "out")
         inputs.mkdir()
         outputs.mkdir()
-        copyfile(source, inputs / "drawing.dwg")
-        args = [
-            str(executable),
-            str(inputs),
-            str(outputs),
-            "ACAD2018",
-            "DXF",
-            "0",
-            "0",
-            "drawing.dwg",
-        ]
-        try:
-            process = subprocess.Popen(
-                args,
-                cwd=executable.parent,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-        except OSError as error:
-            raise CadError(
-                "ODA File Converter를 실행하지 못했습니다. ODA가 직접 실행되는지 확인해 주세요."
-            ) from error
-        with process:
-            deadline = time.monotonic() + 120
-            try:
-                while process.poll() is None:
-                    if control:
-                        control.check()
-                    if time.monotonic() >= deadline:
-                        raise CadError(
-                            "DWG 변환 시간이 초과됐습니다. DXF로 저장한 뒤 다시 시도해 주세요."
-                        )
-                    time.sleep(0.1)
-            finally:
-                if process.poll() is None:
-                    process.kill()
+        staged = inputs / "drawing.dwg"
         converted = outputs / "drawing.dxf"
-        if process.returncode != 0 or not converted.is_file():
-            raise CadError(
-                "ODA File Converter가 DWG에서 DXF를 만들지 못했습니다. "
-                "ODA에서 도면이 열리는지 확인하거나 CAD 프로그램에서 DXF로 저장해 주세요."
-            ) from RuntimeError(
-                f"ODA exit code: {process.returncode}; DXF exists: {converted.is_file()}"
-            )
+        copyfile(source, staged)
+        if engine == "LibreDWG":
+            args = [str(executable), "-o", str(converted), str(staged)]
+        else:
+            args = [
+                str(executable),
+                str(inputs),
+                str(outputs),
+                "ACAD2018",
+                "DXF",
+                "0",
+                "0",
+                staged.name,
+            ]
+        run_dwg_converter(args, converted, control, engine)
         return ezdxf.readfile(converted)
 
 

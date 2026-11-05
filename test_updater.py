@@ -1,99 +1,283 @@
 import os
-os.environ['QT_QPA_PLATFORM']='offscreen'
-import unittest,tempfile,types
-from unittest.mock import Mock,patch
-from PySide6.QtWidgets import QApplication,QWidget,QLabel,QDialog
+
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
+import unittest, tempfile, types
+from unittest.mock import Mock, patch
+from PySide6.QtWidgets import QApplication, QWidget, QLabel, QDialog
 from PySide6.QtCore import QSettings
-from updater import UpdateController,UpdatePrompt
-APP=QApplication.instance() or QApplication([])
+from updater import UpdateController, UpdatePrompt
+
+APP = QApplication.instance() or QApplication([])
+
+
 class UpdateTests(unittest.TestCase):
- def setUp(self):
-  self.tmp=tempfile.TemporaryDirectory();self.settings=QSettings(self.tmp.name+'/s.ini',QSettings.IniFormat)
-  self.window=QWidget();self.window.busy=False;self.window.status=QLabel();self.window.show()
-  self.updater=UpdateController(self.window,self.settings);self.manager=Mock()
- def tearDown(self):self.window.close();self.tmp.cleanup()
- def result(self,v):return self.manager,types.SimpleNamespace(TargetFullRelease=types.SimpleNamespace(Version=v))
- def test_no_background_or_popup_network(self):
-  with patch('updater.feed_url') as feed:
-   for reason in ['background','popup','shell']:self.updater.request(reason)
-   feed.assert_not_called()
- def test_decline_no_download_repeat_suppressed(self):
-  with patch('updater.UpdatePrompt') as prompt:
-   prompt.return_value.exec.return_value=QDialog.Rejected;prompt.return_value.skip.isChecked.return_value=False
-   self.updater.on_checked(self.result('1.0.0'));self.updater.on_checked(self.result('1.0.0'))
-   self.assertEqual(prompt.call_count,1);self.manager.download_updates.assert_not_called()
- def test_skipped_version_persists_next_version_offered(self):
-  with patch('updater.UpdatePrompt') as prompt:
-   prompt.return_value.exec.return_value=QDialog.Rejected;prompt.return_value.skip.isChecked.return_value=True
-   self.updater.on_checked(self.result('1.0.0'));self.assertEqual(self.settings.value('update_skipped_version'),'1.0.0')
-   other=UpdateController(self.window,self.settings);other.on_checked(self.result('1.0.0'));self.assertEqual(prompt.call_count,1)
-   other.on_checked(self.result('1.1.0'));self.assertEqual(prompt.call_count,2)
- def test_approval_required_for_download(self):
-  with patch('updater.UpdatePrompt') as prompt:
-   prompt.return_value.exec.return_value=QDialog.Accepted;prompt.return_value.skip.isChecked.return_value=False
-   self.updater.on_checked(self.result('1.0.0'));self.updater.worker.join(2)
-   self.manager.download_updates.assert_called_once();self.assertTrue(self.updater.installing)
- def test_checkbox_disables_install(self):
-  dialog=UpdatePrompt('1.0');dialog.skip.setChecked(True);self.assertFalse(dialog.install.isEnabled())
- def test_background_bootstrap_disables_auto_apply(self):
-  import velopack_bootstrap
-  sdk=Mock();sdk.App.return_value.set_auto_apply_on_startup.return_value=sdk.App.return_value
-  with patch.dict('sys.modules',{'velopack':sdk}):velopack_bootstrap.bootstrap()
-  sdk.App.return_value.set_auto_apply_on_startup.assert_called_once_with(False)
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.settings = QSettings(self.tmp.name + "/s.ini", QSettings.IniFormat)
+        self.window = QWidget()
+        self.window.busy = False
+        self.window.status = QLabel()
+        self.window.show()
+        self.updater = UpdateController(self.window, self.settings)
+        self.manager = Mock()
+
+    def tearDown(self):
+        self.window.close()
+        self.tmp.cleanup()
+
+    def result(self, v):
+        return self.manager, types.SimpleNamespace(
+            TargetFullRelease=types.SimpleNamespace(Version=v)
+        )
+
+    def test_no_background_or_popup_network(self):
+        with patch("updater.feed_url") as feed:
+            for reason in ["background", "popup", "shell"]:
+                self.updater.request(reason)
+            feed.assert_not_called()
+
+    def test_decline_no_download_repeat_suppressed(self):
+        with patch("updater.UpdatePrompt") as prompt:
+            prompt.return_value.exec.return_value = QDialog.Rejected
+            prompt.return_value.skip.isChecked.return_value = False
+            self.updater.on_checked(self.result("1.0.0"))
+            self.updater.on_checked(self.result("1.0.0"))
+            self.assertEqual(prompt.call_count, 1)
+            self.manager.download_updates.assert_not_called()
+
+    def test_skipped_version_persists_next_version_offered(self):
+        with patch("updater.UpdatePrompt") as prompt:
+            prompt.return_value.exec.return_value = QDialog.Rejected
+            prompt.return_value.skip.isChecked.return_value = True
+            self.updater.on_checked(self.result("1.0.0"))
+            self.assertEqual(self.settings.value("update_skipped_version"), "1.0.0")
+            other = UpdateController(self.window, self.settings)
+            other.on_checked(self.result("1.0.0"))
+            self.assertEqual(prompt.call_count, 1)
+            other.on_checked(self.result("1.1.0"))
+            self.assertEqual(prompt.call_count, 2)
+
+    def test_approval_required_for_download(self):
+        with patch("updater.UpdatePrompt") as prompt:
+            prompt.return_value.exec.return_value = QDialog.Accepted
+            prompt.return_value.skip.isChecked.return_value = False
+            self.updater.on_checked(self.result("1.0.0"))
+            self.updater.worker.join(2)
+            self.manager.download_updates.assert_called_once()
+            self.assertTrue(self.updater.installing)
+
+    def test_checkbox_disables_install(self):
+        dialog = UpdatePrompt("1.0")
+        dialog.skip.setChecked(True)
+        self.assertFalse(dialog.install.isEnabled())
+
+    def test_background_bootstrap_disables_auto_apply(self):
+        import velopack_bootstrap
+
+        sdk = Mock()
+        sdk.App.return_value.set_auto_apply_on_startup.return_value = sdk.App.return_value
+        with patch.dict("sys.modules", {"velopack": sdk}):
+            velopack_bootstrap.bootstrap()
+        sdk.App.return_value.set_auto_apply_on_startup.assert_called_once_with(False)
+
 
 class GithubDistributionTests(unittest.TestCase):
- def test_public_github_source_no_token_and_no_prereleases(self):
-  import updater,json
-  with tempfile.TemporaryDirectory() as folder:
-   p=__import__('pathlib').Path(folder)/'config.json';p.write_text(json.dumps({'source':'github','url':'https://github.com/example/bakuri'}))
-   sdk=Mock()
-   with patch('updater.config_path',return_value=p),patch.dict('sys.modules',{'velopack':sdk}),patch('update_source.PublicReleaseManager') as source:
-    url=updater.feed_url();updater.make_update_manager(url)
-   source.assert_called_once_with('https://github.com/example/bakuri')
-   sdk.GithubSource.assert_not_called();sdk.UpdateManager.assert_not_called()
- def test_rejects_credentials_and_non_repository_github_url(self):
-  import updater,json
-  from pathlib import Path
-  cases=['http://github.com/owner/repo','https://token@github.com/owner/repo','https://github.com/owner/repo?token=secret','https://github.com/owner/repo/releases','https://other.example/owner/repo']
-  with tempfile.TemporaryDirectory() as d:
-   p=Path(d)/'config.json'
-   for url in cases:
-    p.write_text(json.dumps({'source':'github','url':url}))
-    with patch('updater.config_path',return_value=p),self.assertRaises(ValueError):updater.feed_url()
- def test_explicit_entry_deduplicated_for_five_minutes(self):
-  window=QWidget();window.busy=False;window.status=QLabel();window.show()
-  settings=QSettings('BakuriTest','cooldown');manager=UpdateController(window,settings)
-  with patch('updater.feed_url',return_value=''),patch('updater.time.monotonic',side_effect=[100,101,401]):
-   manager.request('direct');manager.worker.join(2);manager.checking=False
-   first=manager.worker;manager.request('expanded');self.assertIs(manager.worker,first)
-   manager.request('expanded');manager.worker.join(2);self.assertIsNot(manager.worker,first)
-  window.close()
+    def test_public_github_source_no_token_and_no_prereleases(self):
+        import updater, json
+
+        with tempfile.TemporaryDirectory() as folder:
+            p = __import__("pathlib").Path(folder) / "config.json"
+            p.write_text(
+                json.dumps({"source": "github", "url": "https://github.com/example/bakuri"})
+            )
+            sdk = Mock()
+            with (
+                patch("updater.config_path", return_value=p),
+                patch.dict("sys.modules", {"velopack": sdk}),
+                patch("update_source.PublicReleaseManager") as source,
+            ):
+                url = updater.feed_url()
+                updater.make_update_manager(url)
+            source.assert_called_once_with("https://github.com/example/bakuri")
+            sdk.GithubSource.assert_not_called()
+            sdk.UpdateManager.assert_not_called()
+
+    def test_rejects_credentials_and_non_repository_github_url(self):
+        import updater, json
+        from pathlib import Path
+
+        cases = [
+            "http://github.com/owner/repo",
+            "https://token@github.com/owner/repo",
+            "https://github.com/owner/repo?token=secret",
+            "https://github.com/owner/repo/releases",
+            "https://other.example/owner/repo",
+        ]
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "config.json"
+            for url in cases:
+                p.write_text(json.dumps({"source": "github", "url": url}))
+                with patch("updater.config_path", return_value=p), self.assertRaises(ValueError):
+                    updater.feed_url()
+
+    def test_explicit_entry_deduplicated_for_five_minutes(self):
+        window = QWidget()
+        window.busy = False
+        window.status = QLabel()
+        window.show()
+        settings = QSettings("BakuriTest", "cooldown")
+        manager = UpdateController(window, settings)
+        with (
+            patch("updater.feed_url", return_value=""),
+            patch("updater.time.monotonic", side_effect=[100, 101, 401]),
+        ):
+            manager.request("direct")
+            manager.worker.join(2)
+            manager.checking = False
+            first = manager.worker
+            manager.request("expanded")
+            self.assertIs(manager.worker, first)
+            manager.request("expanded")
+            manager.worker.join(2)
+            self.assertIsNot(manager.worker, first)
+        window.close()
+
 
 class UpdateEntryTests(unittest.TestCase):
- setUp=UpdateTests.setUp
- tearDown=UpdateTests.tearDown
- def test_tray_reopen_checks_again_inside_startup_cooldown(self):
-  factory=Mock()
-  factory.return_value.check_for_updates.return_value=None
-  self.updater.factory=factory
-  with patch('updater.feed_url',return_value='https://github.com/example/bakuri'),patch('updater.time.monotonic',side_effect=[100,101]):
-   self.updater.request('direct')
-   self.updater.worker.join(2);APP.processEvents()
-   self.window.hide();self.window.show()
-   self.updater.request('tray')
-   self.updater.worker.join(2);APP.processEvents()
-  self.assertEqual(factory.call_count,2)
- def test_tray_entry_checks_but_failure_keeps_current_status_without_dialog(self):
-  self.window.status.setText('기존 변환 결과')
-  factory=Mock(side_effect=ConnectionError('offline'))
-  self.updater.factory=factory
-  with patch('updater.feed_url',return_value='https://github.com/example/bakuri'),patch('updater.friendly_error') as log,patch('updater.QMessageBox.warning') as warning:
-   self.updater.request('tray');self.updater.worker.join(2);APP.processEvents()
-   factory.assert_called_once();log.assert_called_once();warning.assert_not_called()
-  self.assertFalse(self.updater.checking);self.assertFalse(self.updater.installing)
-  self.assertEqual(self.window.status.text(),'기존 변환 결과');self.assertTrue(self.window.isEnabled())
- def test_failed_download_still_warns_and_restores_window(self):
-  self.updater.installing=True;self.window.setEnabled(False)
-  with patch('updater.QMessageBox.warning') as warning:
-   self.updater.on_failed('다운로드 실패');warning.assert_called_once()
-  self.assertFalse(self.updater.installing);self.assertTrue(self.window.isEnabled())
+    setUp = UpdateTests.setUp
+    tearDown = UpdateTests.tearDown
+
+    def test_tray_reopen_checks_again_inside_startup_cooldown(self):
+        factory = Mock()
+        factory.return_value.check_for_updates.return_value = None
+        self.updater.factory = factory
+        with (
+            patch("updater.feed_url", return_value="https://github.com/example/bakuri"),
+            patch("updater.time.monotonic", side_effect=[100, 101]),
+        ):
+            self.updater.request("direct")
+            self.updater.worker.join(2)
+            APP.processEvents()
+            self.window.hide()
+            self.window.show()
+            self.updater.request("tray")
+            self.updater.worker.join(2)
+            APP.processEvents()
+        self.assertEqual(factory.call_count, 2)
+
+    def test_tray_entry_checks_but_failure_keeps_current_status_without_dialog(self):
+        self.window.status.setText("기존 변환 결과")
+        factory = Mock(side_effect=ConnectionError("offline"))
+        self.updater.factory = factory
+        with (
+            patch("updater.feed_url", return_value="https://github.com/example/bakuri"),
+            patch("updater.friendly_error") as log,
+            patch("updater.QMessageBox.warning") as warning,
+        ):
+            self.updater.request("tray")
+            self.updater.worker.join(2)
+            APP.processEvents()
+            factory.assert_called_once()
+            log.assert_called_once()
+            warning.assert_not_called()
+        self.assertFalse(self.updater.checking)
+        self.assertFalse(self.updater.installing)
+        self.assertEqual(self.window.status.text(), "기존 변환 결과")
+        self.assertTrue(self.window.isEnabled())
+
+    def test_failed_download_still_warns_and_restores_window(self):
+        self.updater.installing = True
+        self.window.setEnabled(False)
+        with patch("updater.QMessageBox.warning") as warning:
+            self.updater.on_failed("다운로드 실패")
+            warning.assert_called_once()
+        self.assertFalse(self.updater.installing)
+        self.assertTrue(self.window.isEnabled())
+
+
+class UpdateRecoveryTests(unittest.TestCase):
+    setUp = UpdateTests.setUp
+    tearDown = UpdateTests.tearDown
+    result = UpdateTests.result
+
+    def test_reopening_after_later_checks_and_offers_again(self):
+        factory = Mock()
+        factory.return_value.check_for_updates.return_value = self.result("1.0.4")[1]
+        self.updater.factory = factory
+        with (
+            patch("updater.feed_url", return_value="https://github.com/example/bakuri"),
+            patch("updater.UpdatePrompt") as prompt,
+        ):
+            prompt.return_value.exec.return_value = QDialog.Rejected
+            prompt.return_value.skip.isChecked.return_value = False
+            for reason in ("direct", "direct", "tray"):
+                self.updater.request(reason)
+                self.updater.worker.join(2)
+                APP.processEvents()
+            self.assertEqual(factory.call_count, 3)
+            self.assertEqual(prompt.call_count, 3)
+
+    def test_check_finishing_while_hidden_is_retained_until_visible(self):
+        self.window.hide()
+        with patch("updater.UpdatePrompt") as prompt:
+            prompt.return_value.exec.return_value = QDialog.Rejected
+            prompt.return_value.skip.isChecked.return_value = False
+            self.updater.on_checked(self.result("1.0.4"))
+            prompt.assert_not_called()
+            self.assertIsNotNone(self.updater.pending)
+            self.window.show()
+            self.updater.resume()
+            prompt.assert_called_once()
+            self.assertIsNone(self.updater.pending)
+
+    def test_opening_while_busy_defers_check_until_idle(self):
+        factory = Mock()
+        factory.return_value.check_for_updates.return_value = None
+        self.updater.factory = factory
+        self.window.busy = True
+        with patch("updater.feed_url", return_value="https://github.com/example/bakuri"):
+            self.updater.request("tray")
+            factory.assert_not_called()
+            self.window.busy = False
+            self.updater.resume()
+            self.updater.worker.join(2)
+            APP.processEvents()
+            factory.assert_called_once()
+            self.assertIsNone(self.updater.deferred)
+
+    def test_manual_check_can_offer_a_version_previously_skipped(self):
+        self.settings.setValue("update_skipped_version", "1.0.4")
+        factory = Mock()
+        factory.return_value.check_for_updates.return_value = self.result("1.0.4")[1]
+        self.updater.factory = factory
+        with (
+            patch("updater.feed_url", return_value="https://github.com/example/bakuri"),
+            patch("updater.UpdatePrompt") as prompt,
+        ):
+            prompt.return_value.exec.return_value = QDialog.Rejected
+            prompt.return_value.skip.isChecked.return_value = False
+            self.updater.request("tray")
+            self.updater.worker.join(2)
+            APP.processEvents()
+            prompt.assert_not_called()
+            self.updater.request("manual")
+            self.updater.worker.join(2)
+            APP.processEvents()
+            prompt.assert_called_once()
+
+    def test_manual_failure_is_visible_but_automatic_failure_is_quiet(self):
+        self.updater.factory = Mock(side_effect=ConnectionError("offline"))
+        with (
+            patch("updater.feed_url", return_value="https://github.com/example/bakuri"),
+            patch("updater.friendly_error", return_value="업데이트 서버에 연결하지 못했습니다."),
+        ):
+            self.window.status.setText("기존 결과")
+            self.updater.request("direct")
+            self.updater.worker.join(2)
+            APP.processEvents()
+            self.assertEqual(self.window.status.text(), "기존 결과")
+            self.updater.request("manual")
+            self.updater.worker.join(2)
+            APP.processEvents()
+            self.assertIn("연결하지 못했습니다", self.window.status.text())
+            self.assertFalse(self.updater.checking)

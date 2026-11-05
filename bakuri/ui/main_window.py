@@ -57,6 +57,8 @@ class Window(QWidget):
         menu.addAction("열기", lambda: self.open_main("tray"))
         menu.addAction("설정", self.open_settings)
         menu.addAction("사용 설명", self.open_help)
+        self.tray_update_action = menu.addAction("업데이트 확인", lambda: self.open_main("manual"))
+        self.tray_update_action.setEnabled(not DEVELOPMENT)
         self.tray.setContextMenu(menu)
         self.results = ResultsPresenter(self)
         self.progress_timer = QTimer(self)

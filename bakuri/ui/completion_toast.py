@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QProgressBar,
 )
 
 
@@ -62,6 +63,16 @@ class CompletionToast(QWidget):
         self.summary.setTextFormat(Qt.PlainText)
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(1)
+        self.progress_bar.hide()
+        layout.addWidget(self.progress_bar)
+        self.notice = QLabel()
+        self.notice.setTextFormat(Qt.PlainText)
+        self.notice.setWordWrap(True)
+        self.notice.hide()
+        layout.addWidget(self.notice)
         self.actions = QWidget()
         actions = QHBoxLayout(self.actions)
         actions.setContentsMargins(0, 0, 0, 0)
@@ -90,6 +101,9 @@ class CompletionToast(QWidget):
         self.showing_progress = True
         self.title.setText("바꾸리 작업 중")
         self.actions.hide()
+        self.progress_bar.setValue(1)
+        self.progress_bar.show()
+        self.notice.hide()
         self.progress_rect = tray_rect
         self.update_progress(text)
         self.show()
@@ -99,9 +113,25 @@ class CompletionToast(QWidget):
             self.summary.setText(text)
             self.place(self.progress_rect)
 
+    def set_progress(self, percent):
+        self.progress_bar.setValue(percent)
+
+    def set_notice(self, text):
+        self.notice.setText(text)
+        self.notice.setVisible(bool(text))
+        self.place(getattr(self, "progress_rect", None))
+
+    def queued(self, progress, count, tray_rect):
+        if not self.showing_progress:
+            self.start_progress(progress, tray_rect)
+        self.set_notice(f"대기열에 추가했습니다 · 대기 {count}개")
+        self.show()
+
     def present(self, summary, has_folder, warning=False, tray_rect=None):
         self.showing_progress = False
         self.actions.show()
+        self.progress_bar.hide()
+        self.notice.hide()
         self.title.setText("작업 결과를 확인해 주세요" if warning else "바꾸리 작업 결과")
         self.summary.setText(summary)
         self.folder.setEnabled(has_folder)

@@ -59,7 +59,7 @@ class PdfSplitUiTests(unittest.TestCase):
         w.fmt.setCurrentText("PDF")
         w.busy = True
         w.output_changed("PDF")
-        self.assertFalse(w.pdf_pages.isEnabled())
+        self.assertTrue(w.pdf_pages.isEnabled())
         w.busy = False
 
     def test_popup_selects_split_for_one_and_merge_for_multiple(self):

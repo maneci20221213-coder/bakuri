@@ -53,7 +53,10 @@ class CompletionUiTests(unittest.TestCase):
         toast.start_progress("0% · 작업 준비", w.tray.geometry())
         w.busy = True
         w.update_progress(37, "처리 중")
-        self.assertEqual(toast.summary.text(), "37% · 처리 중")
+        self.assertTrue(toast.summary.text().startswith("37% · 처리 중"))
+        self.assertIn("남은 시간 계산 중", toast.summary.text())
+        self.assertEqual(toast.progress_bar.value(), 37)
+        self.assertEqual(toast.progress_bar.text(), "37%")
         self.assertFalse(toast.actions.isVisible())
         self.assertFalse(toast.timer.isActive())
         w.results.finished(

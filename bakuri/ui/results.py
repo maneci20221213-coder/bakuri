@@ -154,3 +154,7 @@ class ResultsPresenter:
             window.compression_rows,
             warning=outcome == "failed" or failed > 0,
         )
+        if outcome == "done":
+            self.toast.progress_bar.setValue(100)
+            self.toast.progress_bar.show()
+            self.toast.place(window.tray.geometry())

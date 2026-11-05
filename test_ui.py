@@ -221,10 +221,10 @@ class JobUiTests(unittest.TestCase):
    def operation(control):
     control.update(37,'test measured units');entered.set();release.wait(30);control.check()
    center=QPoint(400,300);w.begin_job(operation,'convert',center);self.assertTrue(entered.wait(1));app.processEvents()
-   self.assertEqual(w.run.text(),'작업 중지');self.assertTrue(w.run.isEnabled());self.assertIn('37%',w.tray.toolTip());self.assertTrue(w.tray_stop_action.isEnabled())
+   self.assertEqual(w.run.text(),'대기열에 추가');self.assertTrue(w.run.isEnabled());self.assertIn('37%',w.tray.toolTip());self.assertTrue(w.tray_stop_action.isEnabled())
    if stop_from_tray:w.tray_stop_action.trigger()
-   else:QTest.mouseClick(w.run,Qt.LeftButton)
-   self.assertTrue(w.control.cancelled.is_set());self.assertEqual(w.run.text(),'중지 요청 중');self.assertTrue(w.busy);self.assertFalse(w.run.isEnabled());self.assertFalse(w.tray_stop_action.isEnabled())
+   else:QTest.mouseClick(w.stop_job,Qt.LeftButton)
+   self.assertTrue(w.control.cancelled.is_set());self.assertEqual(w.stop_job.text(),'중지 요청 중');self.assertTrue(w.busy);self.assertTrue(w.run.isEnabled());self.assertFalse(w.stop_job.isEnabled());self.assertFalse(w.tray_stop_action.isEnabled())
    w.update_progress(60,'late queued progress');self.assertIn('중지 요청 중',w.status.text())
    release.set();deadline=time.monotonic()+2
    while w.busy and time.monotonic()<deadline:QTest.qWait(10)

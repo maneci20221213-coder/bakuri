@@ -42,3 +42,9 @@ Full unittest discovery is required on Windows CI, native popup timer/focus chec
 PDF page splitting uses `domain/pdf_selection.py` for pure 1-based input validation, `PdfPagesRequest` for the immutable worker boundary, `conversion/pdf_split.py` for native PDF page copying, and the shared `ui/pdf_split.py` dialog. It reuses JobControl, cancellation, collision-safe publication and completion reports. No raster rendering is used for splitting.
 
 Multi-photo handling uses `ui/multi_image.py` for batch-local preflight choices, immutable `MultiImageSelection` values on requests, and `conversion/multi_image.py` for metadata classification and raw JPEG frame staging. Workers recheck file fingerprints and route independent frames through the existing converters/compressor with original-folder publication. Frame-size baselines prevent duplicate MPO savings, and JobReport notes retain the selection in completion notifications. Unknown frames never auto-classify from dimensions or camera brand.
+
+## Sequential work queue
+
+`ui/main_window.py` owns a FIFO of immutable requests and starts one worker at a time. New submissions capture paths/options immediately; editing or clearing the visible list does not change active or queued requests. Completion, cancellation and failures all advance the queue after the result presenter finishes. Current-job cancellation and clearing pending requests are separate actions. Rename is disabled while conversion runs to keep queued paths valid. The queue is in-memory and is not restored after exit.
+
+`application/progress.py` estimates remaining time from monotonic elapsed time and measured backend progress; the one-second UI timer refreshes elapsed time, never fabricates percentages. External COM/CAD stages may not report finer progress. A completed estimate is shown only when the backend reports 100; successful completion also leaves the tray progress bar at 100.

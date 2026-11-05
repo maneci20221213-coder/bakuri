@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 GROUPS = {
-    "core": ["test_application", "test_architecture", "test_fill_down"],
+    "core": ["test_application", "test_architecture", "test_fill_down", "test_job_queue"],
     "convert": [
         "test_engine",
         "test_images",

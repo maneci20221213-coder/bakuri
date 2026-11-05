@@ -177,10 +177,7 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
     def report(fraction, stage, done=0, total=0):
         advance(fraction)
         if control:
-            control.update(
-                control.percent,
-                f"{source.name} · {stage}" + (f" · {done:,}/{total:,}개" if total else ""),
-            )
+            control.update(control.percent, f"{source.name} · {stage}")
             control.measure_units(done, total, f"{source} · {stage}")
 
     report(0.05, "CAD 도면 읽기")

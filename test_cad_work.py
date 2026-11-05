@@ -32,6 +32,8 @@ class CadWorkTests(unittest.TestCase):
             convert([source], "pdf", control=control)
             rendering = [p for p, text in values if "도면 그리기" in text]
             self.assertGreater(len(set(rendering)), 20)
+            for _, text in values:
+                self.assertNotRegex(text, r"[0-9,]+/[0-9,]+개")
             samples = [(d, n) for d, n, s in work if s.endswith("도면 그리기")]
             self.assertEqual(samples[0], (0, 1804))
             self.assertTrue(any(0 < d < n for d, n in samples))

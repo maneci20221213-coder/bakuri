@@ -41,3 +41,7 @@ Windows file converter. Python 3.12, PySide6, Pillow, PyMuPDF; Office/Hancom COM
 Run the relevant group while editing, full suite before pushing. Windows CI also checks the frozen executable.
 `python -m black --check bakuri tools app.py engine.py compression.py jobs.py rename_engine.py file_list.py rename_ui.py work_ui.py prepare_source.py test_application.py test_architecture.py`.
 Dev tools are in `requirements-dev.txt`, never runtime dependencies. Include packages in `prepare_source.py` when adding directories. Do not publish stable/tag/release for a developer-only request.
+
+## User-facing documentation
+
+Keep USER-GUIDE.md, RENAME-GUIDE.md, README.md, in-app help and release notes brief and written for end users. Explain actions, saving behavior and practical limits only. Do not append developer-edition notes, engine internals, record counts, implementation details or build instructions. Put technical reference material in DEVELOPER-README.md or docs/. Maintain this rule for future documentation changes. Patch notes describe published releases only.

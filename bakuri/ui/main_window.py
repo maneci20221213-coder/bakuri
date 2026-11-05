@@ -71,7 +71,7 @@ class Window(QWidget):
         self.tray_clear_action.setEnabled(False)
         menu.addSeparator()
         menu.addAction("완전 종료", self.quit)
-        self.tray.setToolTip("바꾸리 개발용 · 대기 중")
+        self.tray.setToolTip("바꾸리 · 대기 중")
         self.tray.activated.connect(
             lambda reason: self.open_main("tray") if reason == QSystemTrayIcon.Trigger else None
         )

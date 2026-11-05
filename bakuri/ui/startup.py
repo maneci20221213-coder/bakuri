@@ -9,7 +9,7 @@ from .main_window import Window
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("BakuriDevelopment")
+    app.setApplicationName("BakuriDevelopment" if DEVELOPMENT else "BakuriFileConverter")
     app.setQuitOnLastWindowClosed(False)
     if sys.platform == "win32" and not DEVELOPMENT:
         from windows import apply_install_options

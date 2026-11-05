@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QTabWidget,
 )
-from build_channel import DEVELOPMENT, DEFAULT_HOTKEY
+from build_channel import DEFAULT_HOTKEY
 from theme import stylesheet
 
 
@@ -56,8 +56,6 @@ class HelpDialog(QDialog):
         except (OSError, UnicodeError):
             content = fallback
         content = content.replace("{{HOTKEY}}", DEFAULT_HOTKEY)
-        if DEVELOPMENT and filename == "USER-GUIDE.md":
-            content += "\n\n**개발판 안내:** 기본 단축키는 F9입니다. 자동 업데이트는 사용하지 않습니다. 시작프로그램·우클릭 메뉴는 설정에서 켤 수 있으며 일반 배포판과 별도로 등록됩니다."
         text.setMarkdown(content)
         self.tabs.addTab(text, title)
         return text

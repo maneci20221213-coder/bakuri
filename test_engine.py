@@ -32,3 +32,26 @@ class FileNameTests(unittest.TestCase):
     doc.new_page(); doc.save(p)
    self.assertEqual(Path(convert([p],'png')[0]).name,'보고서.png')
    self.assertEqual(Path(convert([p],'png')[0]).name,'보고서_1.png')
+
+
+class CadConversionTests(unittest.TestCase):
+ def test_dxf_to_vector_pdf_and_images(self):
+  import ezdxf,fitz
+  from bakuri.conversion.service import convert
+  with tempfile.TemporaryDirectory() as folder:
+   source=Path(folder)/'drawing.dxf'
+   doc=ezdxf.new();model=doc.modelspace()
+   model.add_line((0,0),(100,50));model.add_circle((40,25),10)
+   doc.saveas(source)
+   original=source.read_bytes()
+   for output in ('pdf','png','jpeg'):
+    result=Path(convert([source],output)[0])
+    self.assertEqual(result.suffix,'.'+output)
+    if output=='pdf':
+     with fitz.open(result) as pdf:
+      self.assertEqual(len(pdf),1)
+      self.assertTrue(any(drawing.get('color') for drawing in pdf[0].get_drawings()))
+    else:
+     with Image.open(result) as image:
+      self.assertGreater(image.width,image.height)
+   self.assertEqual(source.read_bytes(),original)

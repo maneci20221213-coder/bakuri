@@ -6,3 +6,4 @@ pywin32==311; sys_platform == 'win32'
 pynput==1.8.1; sys_platform == 'win32'
 
 velopack==1.2.161; sys_platform == 'win32'
+ezdxf==1.4.5

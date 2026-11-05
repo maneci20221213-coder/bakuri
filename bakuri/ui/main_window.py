@@ -70,7 +70,7 @@ class Window(QWidget):
         from updater import UpdateController
 
         self.updater = UpdateController(self, self.settings, disabled=DEVELOPMENT)
-        self.popup = QuickPopup()
+        self.popup = QuickPopup(settings=self.settings)
         self.bus.clicked.connect(self.popup.clicked_at)
         self.bus.dismiss.connect(self.popup.hide)
         self.bus.popup_key.connect(self.popup.native_key)

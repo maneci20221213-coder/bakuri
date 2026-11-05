@@ -4,7 +4,7 @@ import io, shutil
 from PIL import Image
 import fitz
 from image_inputs import frames
-from bakuri.domain.formats import IMAGES
+from bakuri.domain.formats import CAD, IMAGES
 from .office import office
 
 
@@ -48,6 +48,10 @@ def to_pdf(src, dest, session=None, control=None, advance=lambda f: None):
         shutil.copyfile(src, dest)
     elif ext in {".jpg", ".jpeg"} and jpeg_pdf(src, dest, control):
         advance(0.8)
+    elif ext in CAD:
+        from .cad import cad_to_pdf
+
+        cad_to_pdf(src, dest, control, advance)
     elif ext in IMAGES:
         with fitz.open() as document:
             for index, image in enumerate(frames(src)):

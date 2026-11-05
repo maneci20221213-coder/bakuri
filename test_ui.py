@@ -21,7 +21,7 @@ class UiTests(unittest.TestCase):
    files.check_all(Qt.Unchecked); self.assertEqual(files.checked_paths(),[])
  def test_settings_and_tray(self):
   w=Window(); dialog=SettingsDialog(w)
-  self.assertEqual(dialog.key.count(),4)
+  self.assertTrue(dialog.key.isReadOnly())
   self.assertIn('설정',[a.text() for a in w.tray.contextMenu().actions()])
   self.assertIn(__import__('version').VERSION,w.windowTitle());self.assertNotIn('시험',w.windowTitle())
   w.tray.hide(); w.deleteLater()
@@ -34,6 +34,25 @@ class PopupTests(unittest.TestCase):
   QTest.keyClick(popup.buttons['pdf'],Qt.Key_Right)
   QTest.keyClick(popup.buttons['jpeg'],Qt.Key_Return)
   self.assertEqual(selected,['hwpx']); self.assertFalse(popup.isVisible())
+ def test_profile_customization_changes_button_actions_and_disables_unsupported(self):
+  from unittest.mock import Mock
+  settings=Mock()
+  configured={'quick_menu/image/pdf':'jpeg','quick_menu/image/png':'pdf_split'}
+  settings.value.side_effect=lambda key,default: configured.get(key,default)
+  popup=QuickPopup(animate=False,settings=settings); selected=[]
+  popup.chosen.connect(selected.append)
+  popup.present(['test.png'])
+  self.assertEqual(popup.buttons['pdf'].accessibleName(),'JPEG 변환')
+  self.assertFalse(popup.buttons['png'].isEnabled())
+  popup.pick('png');self.assertEqual(selected,[])
+  popup.pick('pdf');self.assertEqual(selected,['jpeg'])
+  configured['quick_menu/.png/pdf']='png'
+  popup.present(['test.png'])
+  self.assertEqual(popup.buttons['pdf'].accessibleName(),'PNG 변환')
+  popup.hide()
+  popup.present(['test.dxf'])
+  self.assertEqual(popup.buttons['pdf'].accessibleName(),'PDF 변환')
+  popup.hide()
  def test_escape(self):
   from PySide6.QtTest import QTest
   popup=QuickPopup(); popup.present(['sample.pdf']); app.processEvents()

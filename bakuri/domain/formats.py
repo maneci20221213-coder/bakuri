@@ -20,8 +20,9 @@ SPREADSHEETS = {
 }
 WORDS = {".doc", ".docx"}
 PAGE_SPLIT_INPUTS = {".pdf"} | HANCOM | WORDS
+CAD = {".dxf", ".dwg"}
 PRESENTATIONS = {".ppt", ".pptx"}
-SUPPORTED = IMAGES | {".pdf", ".hwp", ".hwpx", ".odt"} | SPREADSHEETS | WORDS | PRESENTATIONS
+SUPPORTED = IMAGES | {".pdf", ".hwp", ".hwpx", ".odt"} | SPREADSHEETS | WORDS | PRESENTATIONS | CAD
 
 
 def can_convert(path, fmt):

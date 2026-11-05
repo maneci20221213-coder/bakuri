@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from bakuri.domain.formats import PAGE_SPLIT_INPUTS, IMAGES, HANCOM, SPREADSHEETS
+from bakuri.domain.quick_actions import ACTIONS, DIRECTIONS, action_available, selection_profile
 from theme import icon
 
 
@@ -21,11 +22,12 @@ class QuickPopup(QWidget):
     chosen = Signal(str)
     visibility = Signal(bool)
 
-    def __init__(self, animate=None):
+    def __init__(self, animate=None, settings=None):
         super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedSize(350, 264)
         self.setFocusPolicy(Qt.StrongFocus)
+        self.settings = settings
         self.preparing = False
         self.setStyleSheet(
             'QuickPopup {background:transparent;} QPushButton {background:rgba(255,255,255,225);color:#26354A;border:1px solid rgba(218,228,242,230);border-radius:12px;padding:0;} QPushButton:hover {background:rgba(239,246,255,245);border-color:#96C1F8;} QPushButton[selected="true"] {background:rgba(244,249,255,245);border:2px solid #2E83F2;} QLabel {background:transparent;border:0;color:#26354A;font-family:"Malgun Gothic","Noto Sans CJK KR",sans-serif;}'
@@ -164,7 +166,8 @@ class QuickPopup(QWidget):
         extensions = {Path(p).suffix.lower() for p in paths}
         images = bool(paths) and extensions <= IMAGES
         pdfs = extensions == {".pdf"}
-        office_split = len(paths) == 1 and extensions <= PAGE_SPLIT_INPUTS and not pdfs
+        hancom = bool(paths) and extensions <= HANCOM
+        office_split = len(paths) == 1 and extensions <= PAGE_SPLIT_INPUTS and not (pdfs or hancom)
         self.buttons["pdf_split"].setVisible(office_split)
         self.actions = {}
         labels = {"pdf": ("PDF", "pdf"), "png": ("PNG", "png"), "jpeg": ("JPEG", "jpeg")}
@@ -177,20 +180,53 @@ class QuickPopup(QWidget):
             self.actions = {"pdf": "pdf_split" if len(paths) == 1 else "pdf_merge", "jpeg": "hwpx"}
             labels["pdf"] = ("페이지 나누기" if len(paths) == 1 else "PDF 합치기", "pdf")
             labels["jpeg"] = ("한글", "hwpx")
-        elif extensions and extensions <= HANCOM and len(paths) > 1:
-            self.actions = {"pdf": "hwp_merge"}
-            labels["pdf"] = ("한글 합치기", "hwpx")
-        for key, (label, asset) in labels.items():
+        elif hancom:
+            single = len(paths) == 1
+            self.actions = {
+                "pdf": "pdf_split" if single else "hwp_merge",
+                "png": "pdf",
+                "jpeg": "png",
+            }
+            labels["pdf"] = ("페이지 나누기" if single else "한글 합치기", "hwpx")
+            labels["png"] = ("PDF 변환", "pdf")
+            labels["jpeg"] = ("PNG 변환", "png")
+        labels["more"] = ACTIONS["more"]
+        profile = selection_profile(extensions)
+        if profile == "cad":
+            labels["pdf"] = ACTIONS["pdf"]
+            labels["png"] = ACTIONS["png"]
+            labels["jpeg"] = ACTIONS["jpeg"]
+        overrides = [next(iter(extensions)), profile] if len(extensions) == 1 else [profile]
+        for key in DIRECTIONS:
+            custom = ""
+            if self.settings:
+                for override in overrides:
+                    custom = self.settings.value(f"quick_menu/{override}/{key}", "")
+                    if custom in ACTIONS:
+                        break
+            if custom in ACTIONS:
+                self.actions[key] = custom
+                labels[key] = ACTIONS[custom]
+            action = self.actions.get(key, key)
+            label, asset = labels[key]
+            if action == "pdf_split" and hancom:
+                asset = "hwpx"
             button = self.buttons[key]
             button.setAccessibleName(label)
             button.layout().itemAt(0).widget().setPixmap(icon(asset).pixmap(30, 32))
             button.layout().itemAt(1).widget().setText(label)
-        self.buttons["pdf"].setEnabled(True)
-        self.buttons["pdf"].setToolTip(
-            "일정 페이지마다 나누거나 원하는 페이지를 추출합니다."
-            if pdfs and len(paths) == 1
-            else ""
-        )
+            available = action_available(action, paths)
+            button.setEnabled(available)
+            button.setToolTip("" if available else "선택한 파일에는 이 기능을 사용할 수 없습니다.")
+        if not any(self.buttons[key].isEnabled() for key in DIRECTIONS):
+            self.actions["more"] = "more"
+            button = self.buttons["more"]
+            label, asset = ACTIONS["more"]
+            button.setAccessibleName(label)
+            button.layout().itemAt(0).widget().setPixmap(icon(asset).pixmap(30, 32))
+            button.layout().itemAt(1).widget().setText(label)
+            button.setToolTip("")
+            button.setEnabled(True)
         self.buttons["hwpx"].setVisible(
             bool(paths) and all(Path(p).suffix.lower() == ".hwp" for p in paths)
         )
@@ -201,7 +237,7 @@ class QuickPopup(QWidget):
             bool(paths) and all(Path(p).suffix.lower() in IMAGES | {".pdf"} for p in paths)
         )
         self.note.setText(f"{len(paths)}개 파일 · 방향키 → Enter · Esc 닫기")
-        self.current = "pdf"
+        self.current = next(key for key in DIRECTIONS if self.buttons[key].isEnabled())
         point = QCursor.pos()
         screen = QApplication.screenAt(point) or QApplication.primaryScreen()
         rect = screen.availableGeometry()
@@ -253,6 +289,8 @@ class QuickPopup(QWidget):
 
     def pick(self, key):
         if not self.isVisible() or self.motion.closing:
+            return
+        if not self.buttons[key].isEnabled():
             return
         action = self.actions.get(key, key)
         self.motion.close(lambda: self.chosen.emit(action))
@@ -313,6 +351,8 @@ class QuickPopup(QWidget):
             neighbors["jpeg"][Qt.Key_Up] = "pdf_split"
             neighbors["pdf_split"] = {Qt.Key_Left: "pdf", Qt.Key_Down: "jpeg"}
         target = neighbors.get(self.current, {}).get(key)
+        while target and not self.buttons[target].isEnabled():
+            target = neighbors.get(target, {}).get(key)
         if target:
             self.select(target)
 

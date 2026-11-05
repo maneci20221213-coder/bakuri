@@ -75,13 +75,30 @@ class PdfSplitUiTests(unittest.TestCase):
     def test_office_popup_adds_split_without_replacing_conversion_buttons(self):
         popup = QuickPopup()
         self.addCleanup(popup.hide)
-        for path in ("sample.hwp", "sample.hwpx", "sample.doc", "sample.docx"):
+        for path in ("sample.doc", "sample.docx"):
             popup.present([path])
             self.assertTrue(popup.buttons["pdf_split"].isVisible())
             self.assertEqual(popup.buttons["pdf"].accessibleName(), "PDF")
             self.assertEqual(popup.buttons["png"].accessibleName(), "PNG")
         popup.present(self.paths)
         self.assertFalse(popup.buttons["pdf_split"].isVisible())
+
+    def test_hancom_popup_routes_top_left_and_right_actions(self):
+        popup = QuickPopup(animate=False)
+        self.addCleanup(popup.hide)
+        actions = []
+        popup.chosen.connect(actions.append)
+        for path in ("sample.hwp", "sample.hwpx"):
+            for slot, label, action in (
+                ("pdf", "페이지 나누기", "pdf_split"),
+                ("png", "PDF 변환", "pdf"),
+                ("jpeg", "PNG 변환", "png"),
+            ):
+                popup.present([path])
+                self.assertFalse(popup.buttons["pdf_split"].isVisible())
+                self.assertEqual(popup.buttons[slot].accessibleName(), label)
+                popup.pick(slot)
+                self.assertEqual(actions[-1], action)
 
     def test_dialog_summary_and_invalid_ranges(self):
         dialog = PdfSplitDialog(self.paths[0], 10, self.w)

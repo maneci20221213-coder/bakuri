@@ -28,7 +28,7 @@ class GUIINFO(ctypes.Structure):
     _fields_=[('cbSize',ctypes.c_ulong),('flags',ctypes.c_ulong),('hwndActive',ctypes.c_void_p),('hwndFocus',ctypes.c_void_p),('hwndCapture',ctypes.c_void_p),('hwndMenuOwner',ctypes.c_void_p),('hwndMoveSize',ctypes.c_void_p),('hwndCaret',ctypes.c_void_p),('rcCaret',ctypes.c_long*4)]
 class SelectionWatcher(threading.Thread):
     def __init__(self,callback,error,settings,dismiss=lambda:None,popup_key=lambda vk:None):
-        super().__init__(daemon=True); self.callback=callback; self.error=error; self.jobs=queue.Queue(maxsize=8); self.pressed=set(); self.intercepted=set(); self.restart=threading.Event()
+        super().__init__(daemon=True); self.callback=callback; self.error=error; self.jobs=queue.Queue(maxsize=8); self.pressed=set(); self.intercepted=set(); self.key_window=None; self.restart=threading.Event()
         self.dismiss=dismiss;self.popup_open=False;self.popup_key=popup_key;self.popup_windows=()
         self.update_settings(settings)
         folder=Path(os.environ.get('LOCALAPPDATA',str(Path.home())))/'Bakuri'; folder.mkdir(parents=True,exist_ok=True)
@@ -36,9 +36,23 @@ class SelectionWatcher(threading.Thread):
         if not self.log.handlers:
             from logging.handlers import RotatingFileHandler
             handler=RotatingFileHandler(folder/'hotkey.log',maxBytes=262144,backupCount=1,encoding='utf-8');handler.setFormatter(logging.Formatter('%(asctime)s %(message)s'));self.log.addHandler(handler)
-    def update_settings(self,settings):
-        self.enabled=settings.value('hotkey_enabled',True,type=bool)
-        self.binding=KEYS.get(settings.value('hotkey',DEFAULT_HOTKEY),KEYS['` (백틱)'])
+    def update_settings(self, settings):
+        self.enabled = settings.value('hotkey_enabled', True, type=bool)
+        self.binding = KEYS.get(settings.value('hotkey', DEFAULT_HOTKEY), KEYS[DEFAULT_HOTKEY])
+        try:
+            vk, *mods = map(int, str(settings.value('hotkey_binding', '')).split(','))
+            if 0 < vk <= 0xFE and set(mods) <= {0x10, 0x11, 0x12, 0x5B}:
+                self.binding = vk, tuple(mods)
+        except ValueError:
+            pass
+
+    def modifiers_match(self, mods):
+        state = ctypes.windll.user32.GetAsyncKeyState
+        pressed = {key for key in (0x10, 0x11, 0x12) if state(key) & 0x8000}
+        if state(0x5B) & 0x8000 or state(0x5C) & 0x8000:
+            pressed.add(0x5B)
+        return pressed == set(mods)
+
     def on_press(self,key):
         import win32gui,win32process
         vk=getattr(key,'vk',None) or getattr(getattr(key,'value',None),'vk',None)
@@ -47,17 +61,17 @@ class SelectionWatcher(threading.Thread):
         if not self.enabled: return
         target,mods=self.binding
         if vk!=target: return
-        if any(bool(ctypes.windll.user32.GetAsyncKeyState(k)&0x8000)!=(k in mods) for k in (0x10,0x11,0x12)): return
+        if not self.modifiers_match(mods): return
         hwnd=win32gui.GetForegroundWindow()
         if self.popup_open and (not self.popup_windows or hwnd in self.popup_windows):
             self.dismiss();return True
         klass=win32gui.GetClassName(hwnd)
         if klass not in ('CabinetWClass','ExploreWClass','Progman','WorkerW'): return
         tid,_=win32process.GetWindowThreadProcessId(hwnd); info=GUIINFO(); info.cbSize=ctypes.sizeof(info)
-        if ctypes.windll.user32.GetGUIThreadInfo(tid,ctypes.byref(info)):
+        if ctypes.windll.user32.GetGUIThreadInfo(tid,ctypes.byref(info)) and info.hwndActive==hwnd:
             focus=win32gui.GetClassName(info.hwndFocus) if info.hwndFocus else ''
             # Search boxes and inline file-name editors must retain ordinary key input.
-            if any(x in focus.lower() for x in ('edit','search','richedit')): return
+            if focus.lower() in {'edit', 'searchbox', 'searchboxedit'} or focus.lower().startswith('richedit'): return
         try: self.jobs.put_nowait(hwnd)
         except queue.Full: pass
         return True
@@ -69,16 +83,32 @@ class SelectionWatcher(threading.Thread):
         try:
             vk=int(data.vkCode); key=SimpleNamespace(vk=vk)
             popup_key=vk in (0x25,0x26,0x27,0x28,0x0D,0x1B,0x09,0x20)
-            if msg in (0x100,0x104) and popup_key and self.popup_open:
+            if msg in (0x100,0x104):
                 import win32gui
-                # Foreground-only check: never enumerate COM/Explorer tabs in the hook.
-                if not self.popup_windows or win32gui.GetForegroundWindow() in self.popup_windows:
-                    if vk not in self.intercepted:
-                        if vk==0x1B:self.dismiss()
-                        else:self.popup_key(vk)
-                    self.intercepted.add(vk);suppress=True
-            elif msg in (0x100,0x104):
-                if vk in self.intercepted or self.on_press(key): self.intercepted.add(vk); suppress=True
+
+                hwnd = win32gui.GetForegroundWindow()
+                if self.key_window != hwnd:
+                    # A key-up can be lost while switching windows or desktops.
+                    if not (self.popup_open and hwnd in self.popup_windows and self.key_window in self.popup_windows):
+                        self.pressed.clear()
+                        self.intercepted.clear()
+                    self.key_window = hwnd
+                if vk in self.intercepted:
+                    suppress = True
+                elif (
+                    self.enabled and vk == self.binding[0] and self.on_press(key)
+                ):
+                    self.intercepted.add(vk)
+                    suppress = True
+                elif popup_key and self.popup_open and (
+                    not self.popup_windows or hwnd in self.popup_windows
+                ):
+                    if vk == 0x1B:
+                        self.dismiss()
+                    else:
+                        self.popup_key(vk)
+                    self.intercepted.add(vk)
+                    suppress = True
             elif msg in (0x101,0x105):
                 self.on_release(key)
                 if vk in self.intercepted: self.intercepted.discard(vk); suppress=True

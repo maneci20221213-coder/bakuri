@@ -3,6 +3,7 @@ import logging,os
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from bakuri.domain.pdf_selection import PageSelectionError
+from bakuri.conversion.cad import CadError
 
 MESSAGES={
  'startup':'바꾸리를 시작하지 못했습니다. 실행 중인 바꾸리를 완전히 종료한 뒤 다시 열어 주세요. 계속되면 최신 설치 파일로 다시 설치해 주세요.',
@@ -39,7 +40,7 @@ def log_error(error,context):
 
 def friendly_error(error,context='conversion'):
     text=str(error)
-    if isinstance(error,PageSelectionError) or text in MESSAGES.values():return text
+    if isinstance(error,(PageSelectionError,CadError)) or text in MESSAGES.values():return text
     log_error(error,context)
     if context in {'startup','menu','settings','selection','update_check','update_download','update_install'}:
         return MESSAGES[context]

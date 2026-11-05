@@ -71,7 +71,7 @@ def convert(
             temp = td / "merged.pptx"
             session.slides_document(files, temp, td, dpi)
             control.check()
-            results.append(publish(temp, merged_path(files, "pptx")))
+            results.append(publish(temp, merged_path(files, "pptx", source_folders=source_folders)))
         elif merge and fmt == "hwpx":
             session.advance = lambda f, t: control.update(f * 95, t)
             temp = td / "merged.hwpx"
@@ -82,7 +82,7 @@ def convert(
             else:
                 session.image_document(files, temp, td, image_mode, message)
             control.check()
-            results.append(publish(temp, merged_path(files, "hwpx")))
+            results.append(publish(temp, merged_path(files, "hwpx", source_folders=source_folders)))
         else:
             for index, src in enumerate(files):
                 base = index * 90 / len(files)
@@ -186,7 +186,9 @@ def convert(
                         merged, garbage=4, deflate=True, deflate_images=True, use_objstms=1
                     )
                     control.check()
-                results.append(publish(merged, merged_path(files, "pdf")))
+                results.append(
+                    publish(merged, merged_path(files, "pdf", source_folders=source_folders))
+                )
         control.update(99, "저장 확인")
     control.complete()
     return results

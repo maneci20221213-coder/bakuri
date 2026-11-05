@@ -45,7 +45,7 @@ class ImageTests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as d,patch.object(OfficeSession,'image_document',export):
    paths=[Path(d)/'one.png',Path(d)/'two.bmp']
    for path in paths:Image.new('RGB',(30,20)).save(path)
-   out=convert(paths,'hwpx',True,image_mode='inline');self.assertEqual(len(out),1);self.assertEqual(Path(out[0]).name,'one 등 통합본.hwpx')
+   out=convert(paths,'hwpx',True,image_mode='inline');self.assertEqual(len(out),1);self.assertEqual(Path(out[0]).name,Path(d).name+'_통합본.hwpx')
    self.assertEqual(calls,[(['one.png','two.bmp'],'inline')])
    out=convert(paths,'hwpx');self.assertEqual(len(out),2);self.assertEqual([Path(p).name for p in out],['one.hwpx','two.hwpx'])
    with self.assertRaises(ValueError):convert([Path(d)/'a.hwp'],'hwpx',True)

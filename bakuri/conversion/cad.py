@@ -8,6 +8,18 @@ import subprocess
 from tempfile import TemporaryDirectory
 import time
 
+_CAD_UNICODE = re.compile(r"(?<!\\)\\U\+([0-9a-fA-F]{4})")
+
+
+def decode_cad_text(text):
+    """Decode CAD Unicode escapes without consuming MTEXT layout or literal slashes."""
+
+    def replace(match):
+        code = int(match[1], 16)
+        return chr(code) if not 0xD800 <= code <= 0xDFFF else match[0]
+
+    return _CAD_UNICODE.sub(replace, text)
+
 
 class CadError(ValueError):
     """A CAD problem with a message the user can act on."""
@@ -213,7 +225,11 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
         def resolve_font(self, entity):
             original = super().resolve_font(entity)
             plain_text = getattr(entity, "plain_text", None)
-            required = korean_characters(plain_text()) if callable(plain_text) else set()
+            if getattr(entity, "has_embedded_mtext_entity", False):
+                plain_text = entity.plain_mtext
+            required = (
+                korean_characters(decode_cad_text(plain_text())) if callable(plain_text) else set()
+            )
             if not required or supports(original, required):
                 return original
             return fallback_face(required) or original
@@ -240,6 +256,22 @@ def cad_to_pdf(source, dest, control, advance, orientation="auto"):
             if control:
                 control.check()
             super().draw_entity(entity, properties)
+
+        def draw_text_entity(self, entity, properties):
+            # Attribute values inside INSERT title blocks also take this route.
+            text = entity.dxf.get("text", "")
+            corrected = decode_cad_text(text)
+            if corrected != text:
+                entity = entity.copy()
+                entity.dxf.text = corrected
+            super().draw_text_entity(entity, properties)
+
+        def draw_mtext_entity(self, entity, properties):
+            corrected = decode_cad_text(entity.text)
+            if corrected != entity.text:
+                entity = entity.copy()
+                entity.text = corrected
+            super().draw_mtext_entity(entity, properties)
 
         def draw_complex_mtext(self, mtext, properties):
             def replace_font(match):

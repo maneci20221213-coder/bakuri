@@ -200,6 +200,7 @@ def build_main_view(self):
                 self.resize(self.conversion_size)
         self.previous_mode = index
         self.rename_panel.refresh()
+        self.files.use_column_layout(lambda: self.settings, "rename" if index == 1 else "convert")
 
     self.mode_tabs.currentChanged.connect(change_mode)
     change_mode(0)

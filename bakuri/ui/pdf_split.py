@@ -64,7 +64,7 @@ class PdfSplitDialog(QDialog):
         form.addRow("", self.separate)
 
         hint = QLabel(
-            "특정 페이지 기준은 입력한 페이지부터 새 파일을 만듭니다.\n"
+            "특정 페이지 기준은 입력한 페이지부터 새 파일을 만듭니다. "
             "일부만 추출할 때는 입력한 순서대로 저장합니다."
         )
         output_format = Path(path).suffix[1:].upper()

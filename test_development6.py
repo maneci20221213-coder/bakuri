@@ -73,5 +73,5 @@ class DeveloperHotkeyTests(unittest.TestCase):
   from build_channel import DEFAULT_HOTKEY
   self.assertEqual(DEFAULT_HOTKEY,'F9' if DEVELOPMENT else '` (백틱)');w=Window()
   try:
-   dialog=SettingsDialog(w);self.assertTrue(dialog.enabled.isEnabled());self.assertTrue(dialog.key.isEnabled());self.assertEqual(dialog.auto.isEnabled(),not DEVELOPMENT and __import__('sys').platform=='win32');self.assertEqual(dialog.explorer.isEnabled(),not DEVELOPMENT);dialog.reject()
+   dialog=SettingsDialog(w);self.assertTrue(dialog.enabled.isEnabled());self.assertTrue(dialog.key.isEnabled());self.assertEqual(dialog.auto.isEnabled(),__import__('sys').platform=='win32');self.assertEqual(dialog.explorer.isEnabled(),__import__('sys').platform=='win32');dialog.reject()
   finally:w.tray.hide();w.hide();w.deleteLater()

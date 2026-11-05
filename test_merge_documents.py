@@ -9,7 +9,7 @@ from jobs import JobControl,Cancelled
 
 class MergeTests(unittest.TestCase):
  def test_names(self):
-  for names,expected in [(['사업_1.pdf','사업_2.pdf'],'사업_통합본.pdf'),(['1_보고서.pdf','2_보고서.pdf'],'보고서_통합본.pdf'),(['one.pdf','two.pdf'],'one 등 통합본.pdf')]:self.assertEqual(merged_path(names,'pdf').name,expected)
+  for names,expected in [(['사업_1.pdf','사업_2.pdf'],'사업_통합본.pdf'),(['1_보고서.pdf','2_보고서.pdf'],'보고서_통합본.pdf'),(['one.pdf','two.pdf'],Path.cwd().name+'_통합본.pdf')]:self.assertEqual(merged_path(names,'pdf').name,expected)
  def test_hancom_order_preservation_and_failure(self):
   for fail in [False,True]:
    with tempfile.TemporaryDirectory() as d:

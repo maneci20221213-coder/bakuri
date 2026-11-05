@@ -21,10 +21,32 @@ class UiTests(unittest.TestCase):
    files.check_all(Qt.Unchecked); self.assertEqual(files.checked_paths(),[])
  def test_settings_and_tray(self):
   w=Window(); dialog=SettingsDialog(w)
-  self.assertEqual(dialog.key.count(),4)
+  self.assertTrue(dialog.key.isReadOnly())
   self.assertIn('설정',[a.text() for a in w.tray.contextMenu().actions()])
   self.assertIn(__import__('version').VERSION,w.windowTitle());self.assertNotIn('시험',w.windowTitle())
   w.tray.hide(); w.deleteLater()
+ def test_quick_conversion_settings_group_and_reset(self):
+  from PySide6.QtCore import QSettings
+  from unittest.mock import patch
+  with tempfile.TemporaryDirectory() as folder,patch('settings_ui.DEVELOPMENT',True):
+   w=Window(); w.settings=QSettings(str(Path(folder)/'config.ini'),QSettings.IniFormat)
+   try:
+    w.settings.setValue('quick_menu/.png/pdf','pdf_split')
+    w.settings.setValue('quick_menu/word/png','pdf_split')
+    w.settings.setValue('hotkey','F8')
+    dialog=SettingsDialog(w)
+    labels=[dialog.profile.itemText(i) for i in range(dialog.profile.count())]
+    self.assertEqual(labels,['PDF','이미지','한글 문서','Word','Excel','PPT','CAD 도면','기타 / 혼합'])
+    dialog.profile.setCurrentIndex(dialog.profile.findData('word'))
+    self.assertEqual(dialog.direction_boxes['png'].currentData(),'pdf_split')
+    dialog.reset_quick_menu()
+    self.assertEqual(dialog.direction_boxes['png'].currentData(),'')
+    self.assertTrue(w.settings.contains('quick_menu/word/png'))
+    dialog.save()
+    self.assertFalse(any(key.startswith('quick_menu/') for key in w.settings.allKeys()))
+    self.assertEqual(w.settings.value('hotkey'),'F8')
+   finally:
+    w.tray.hide();w.deleteLater()
 
 class PopupTests(unittest.TestCase):
  def test_direction_and_enter(self):
@@ -34,6 +56,37 @@ class PopupTests(unittest.TestCase):
   QTest.keyClick(popup.buttons['pdf'],Qt.Key_Right)
   QTest.keyClick(popup.buttons['jpeg'],Qt.Key_Return)
   self.assertEqual(selected,['hwpx']); self.assertFalse(popup.isVisible())
+ def test_profile_customization_changes_button_actions_and_disables_unsupported(self):
+  from unittest.mock import Mock
+  settings=Mock()
+  configured={'quick_menu/image/pdf':'jpeg','quick_menu/image/png':'pdf_split'}
+  settings.value.side_effect=lambda key,default: configured.get(key,default)
+  popup=QuickPopup(animate=False,settings=settings); selected=[]
+  popup.chosen.connect(selected.append)
+  popup.present(['test.png'])
+  self.assertEqual(popup.buttons['pdf'].accessibleName(),'JPEG 변환')
+  self.assertFalse(popup.buttons['png'].isEnabled())
+  popup.pick('png');self.assertEqual(selected,[])
+  popup.pick('pdf');self.assertEqual(selected,['jpeg'])
+  configured['quick_menu/.png/pdf']='png'
+  popup.present(['test.png'])
+  self.assertEqual(popup.buttons['pdf'].accessibleName(),'JPEG 변환')
+  popup.hide()
+  popup.present(['test.dxf'])
+  self.assertEqual(popup.buttons['pdf'].accessibleName(),'PDF 변환')
+  popup.hide()
+ def test_all_incompatible_buttons_stay_disabled(self):
+  from unittest.mock import Mock
+  from bakuri.domain.quick_actions import DIRECTIONS
+  settings=Mock()
+  settings.value.return_value='pdf_split'
+  popup=QuickPopup(animate=False,settings=settings); selected=[]
+  popup.chosen.connect(selected.append)
+  self.addCleanup(popup.hide)
+  popup.present(['drawing.dxf'])
+  self.assertTrue(all(not popup.buttons[key].isEnabled() for key in DIRECTIONS))
+  popup.handle_key(Qt.Key_Tab);popup.handle_key(Qt.Key_Return)
+  self.assertEqual(selected,[])
  def test_escape(self):
   from PySide6.QtTest import QTest
   popup=QuickPopup(); popup.present(['sample.pdf']); app.processEvents()
@@ -168,10 +221,10 @@ class JobUiTests(unittest.TestCase):
    def operation(control):
     control.update(37,'test measured units');entered.set();release.wait(30);control.check()
    center=QPoint(400,300);w.begin_job(operation,'convert',center);self.assertTrue(entered.wait(1));app.processEvents()
-   self.assertEqual(w.run.text(),'작업 중지');self.assertTrue(w.run.isEnabled());self.assertIn('37%',w.tray.toolTip());self.assertTrue(w.tray_stop_action.isEnabled())
+   self.assertEqual(w.run.text(),'대기열에 추가');self.assertTrue(w.run.isEnabled());self.assertIn('37%',w.tray.toolTip());self.assertTrue(w.tray_stop_action.isEnabled())
    if stop_from_tray:w.tray_stop_action.trigger()
-   else:QTest.mouseClick(w.run,Qt.LeftButton)
-   self.assertTrue(w.control.cancelled.is_set());self.assertEqual(w.run.text(),'중지 요청 중');self.assertTrue(w.busy);self.assertFalse(w.run.isEnabled());self.assertFalse(w.tray_stop_action.isEnabled())
+   else:QTest.mouseClick(w.stop_job,Qt.LeftButton)
+   self.assertTrue(w.control.cancelled.is_set());self.assertEqual(w.stop_job.text(),'중지 요청 중');self.assertTrue(w.busy);self.assertTrue(w.run.isEnabled());self.assertFalse(w.stop_job.isEnabled());self.assertFalse(w.tray_stop_action.isEnabled())
    w.update_progress(60,'late queued progress');self.assertIn('중지 요청 중',w.status.text())
    release.set();deadline=time.monotonic()+2
    while w.busy and time.monotonic()<deadline:QTest.qWait(10)

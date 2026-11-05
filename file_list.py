@@ -1,6 +1,6 @@
 """Ordered, checked input files with batched duplicate lookup."""
 
-import os, re
+import os, re, json
 from pathlib import Path
 from PySide6.QtCore import Qt, Signal, QSize, QTimer, QEvent, QPointF
 from PySide6.QtGui import QIcon, QMouseEvent
@@ -76,6 +76,10 @@ class Files(QTreeWidget):
         self.itemChanged.connect(lambda item, column: self.sync_master() if column == 0 else None)
         self.place_master()
         self.manual_sizing = False
+        self.saved_sizing = False
+        self.column_settings = None
+        self.column_mode = "convert"
+        self.column_drag_changed = False
         self.header().viewport().installEventFilter(self)
         self.fit_timer = QTimer(self)
         self.fit_timer.setSingleShot(True)
@@ -91,23 +95,65 @@ class Files(QTreeWidget):
         self.drag_selection = ()
         self.press_modifiers = Qt.NoModifier
 
+    def use_column_layout(self, settings_provider, mode):
+        self.column_settings = settings_provider
+        self.column_mode = mode
+        self.saved_sizing = False
+        try:
+            widths = json.loads(settings_provider().value(f"file_columns/{mode}", "{}"))
+            if not isinstance(widths, dict):
+                return
+            widths = {
+                int(column): width
+                for column, width in widths.items()
+                if str(column).isdigit()
+                and int(column) < self.columnCount()
+                and isinstance(width, int)
+                and 40 <= width <= 10000
+            }
+        except (TypeError, ValueError):
+            return
+        if widths:
+            self.saved_sizing = True
+            for column, width in widths.items():
+                self.setColumnWidth(column, width)
+        self.request_name_fit()
+
+    def save_column_layout(self):
+        if self.column_settings is None:
+            return
+        self.saved_sizing = True
+        widths = {
+            str(c): self.columnWidth(c)
+            for c in range(self.columnCount())
+            if not self.isColumnHidden(c)
+        }
+        settings = self.column_settings()
+        settings.setValue(f"file_columns/{self.column_mode}", json.dumps(widths))
+        settings.sync()
+
     def name_column_resized(self, column, *_):
+        if self.manual_sizing:
+            self.column_drag_changed = True
         self.reflow_timer.start(0)
         if column == 5:
             self.request_name_fit()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if hasattr(self, "fit_timer"):
+        if hasattr(self, "fit_timer") and event.size().width() != event.oldSize().width():
             self.request_name_fit()
 
     def eventFilter(self, obj, event):
         if obj is self.header().viewport():
             if event.type() == QEvent.MouseButtonPress:
                 self.manual_sizing = True
+                self.column_drag_changed = False
                 self.fit_timer.stop()
             elif event.type() == QEvent.MouseButtonRelease:
                 self.manual_sizing = False
+                if self.column_drag_changed:
+                    self.save_column_layout()
         return super().eventFilter(obj, event)
 
     def request_name_fit(self):
@@ -119,6 +165,9 @@ class Files(QTreeWidget):
         self.viewport().update()
 
     def fit_name_columns(self):
+        if self.saved_sizing or self.manual_sizing:
+            self.reflow_names()
+            return
         columns = [c for c in (2, 4) if c < self.columnCount() and not self.isColumnHidden(c)]
         if not columns:
             return
@@ -149,7 +198,9 @@ class Files(QTreeWidget):
             widths = [minimum + int(extra * w / sum(weights)) for w in weights]
             widths[-1] += budget - sum(widths)
         else:
-            widths = desired
+            spare = budget - sum(desired)
+            widths = [width + spare // len(columns) for width in desired]
+            widths[-1] += budget - sum(widths)
         for column, width in zip(columns, widths):
             self.setColumnWidth(column, width)
         self.reflow_names()

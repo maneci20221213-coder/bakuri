@@ -110,3 +110,38 @@ class ExplorerSelectionOrderTests(unittest.TestCase):
                 window.Document.SelectedItems.assert_not_called()
                 view.GetItemObject.side_effect = RuntimeError("view order unavailable")
                 self.assertEqual(module.selected_file_paths(window), [last, first])
+
+
+class HotkeyForegroundTests(unittest.TestCase):
+    def test_new_foreground_clears_stale_shortcut_state(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, LOCALAPPDATA=folder):
+            gui = Mock()
+            gui.GetForegroundWindow.return_value = 123
+            with patch.dict(sys.modules, {
+                'winreg': types.ModuleType('winreg'), 'win32gui': gui,
+                'win32process': types.ModuleType('win32process'),
+            }):
+                spec = importlib.util.spec_from_file_location(
+                    'foreground_hook_test', Path(__file__).with_name('windows.py')
+                )
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                settings = Mock()
+                settings.value.side_effect = lambda key, default, **kw: {
+                    'hotkey_binding': '75,17,16'
+                }.get(key, default)
+                watcher = module.SelectionWatcher(lambda _: None, lambda _: None, settings)
+                try:
+                    self.assertEqual(watcher.binding, (75, (17, 16)))
+                    watcher.key_window = 456
+                    watcher.intercepted.add(75)
+                    watcher.pressed.add(75)
+                    watcher.listener = Mock()
+                    with patch.object(watcher, 'on_press', return_value=True) as activate:
+                        watcher.filter_event(0x100, types.SimpleNamespace(vkCode=75))
+                    activate.assert_called_once()
+                    watcher.listener.suppress_event.assert_called_once()
+                finally:
+                    for handler in watcher.log.handlers[:]:
+                        handler.close()
+                        watcher.log.removeHandler(handler)

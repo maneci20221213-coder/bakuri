@@ -49,7 +49,8 @@ class UpdateController(QObject):
         if self.disabled:return
         if reason not in {'direct','expanded','tray'} or self.checking or self.installing or self.window.busy:return
         now=time.monotonic()
-        if self.last_check is not None and now-self.last_check<300:return
+        # Reopening from the tray is an explicit retry, even after a recent startup check.
+        if reason!='tray' and self.last_check is not None and now-self.last_check<300:return
         self.last_check=now;self.checking=True
         def work():
             try:

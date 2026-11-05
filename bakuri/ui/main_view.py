@@ -94,6 +94,15 @@ def build_main_view(self):
     self.fmt.setFixedWidth(150)
     self.fmt.setToolTip("XLSX 출력은 매크로를 저장하지 않습니다. 원본 파일은 보존됩니다.")
     row.addWidget(self.fmt)
+    self.paper_label = QLabel("용지 방향")
+    self.paper_orientation = QComboBox()
+    for label, value in (("자동", "auto"), ("가로", "landscape"), ("세로", "portrait")):
+        self.paper_orientation.addItem(label, value)
+    self.paper_orientation.setAccessibleName("PDF 용지 방향")
+    row.addWidget(self.paper_label)
+    row.addWidget(self.paper_orientation)
+    self.paper_label.hide()
+    self.paper_orientation.hide()
     self.compression_profile = QComboBox()
     add_profiles(self.compression_profile)
     self.compression_profile.setMinimumWidth(140)
@@ -136,11 +145,15 @@ def build_main_view(self):
     row.addWidget(folder)
     self.output_folders = []
     self.notification_folders = []
-    self.status = QLabel("원본 폴더에 새 파일로 저장")
+    self.status = QLabel(self.output_location_text())
     self.status.setObjectName("status")
     self.status.setWordWrap(True)
     self.status.linkActivated.connect(self.status_link)
     row.addWidget(self.status, 1)
+    self.stop_job = QPushButton("작업 중지")
+    self.stop_job.clicked.connect(self.request_stop)
+    self.stop_job.hide()
+    row.addWidget(self.stop_job)
     self.run = QPushButton("변환 시작  →")
     self.run.setObjectName("convert")
     self.run.setMinimumWidth(184)
@@ -187,6 +200,7 @@ def build_main_view(self):
                 self.resize(self.conversion_size)
         self.previous_mode = index
         self.rename_panel.refresh()
+        self.files.use_column_layout(lambda: self.settings, "rename" if index == 1 else "convert")
 
     self.mode_tabs.currentChanged.connect(change_mode)
     change_mode(0)

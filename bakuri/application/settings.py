@@ -9,12 +9,20 @@ class SettingsStore(Protocol):
     def value(self, key, defaultValue=None, **kwargs): ...
 
 
-def conversion_options(settings: SettingsStore) -> ConversionOptions:
+def conversion_options(settings: SettingsStore, orientation="auto") -> ConversionOptions:
     dpi = settings.value("dpi", 150, type=int)
     if dpi not in {96, 150, 200, 300}:
         dpi = 150
     mode = settings.value("image_mode", "background")
-    return ConversionOptions(dpi, mode if mode in {"background", "inline"} else "background")
+    output_mode = settings.value("output_mode", "source")
+    folder = settings.value("output_folder", "")
+    return ConversionOptions(
+        dpi,
+        mode if mode in {"background", "inline"} else "background",
+        orientation,
+        output_mode if output_mode in {"source", "subfolder", "custom"} else "source",
+        folder,
+    )
 
 
 def compression_options(settings: SettingsStore) -> CompressionOptions:

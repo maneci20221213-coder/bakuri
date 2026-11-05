@@ -7,9 +7,11 @@ import subprocess
 import sys
 
 GROUPS = {
-    "core": ["test_application", "test_architecture", "test_fill_down"],
+    "core": ["test_application", "test_architecture", "test_fill_down", "test_job_queue"],
     "convert": [
         "test_engine",
+        "test_cad_titles",
+        "test_cad_work",
         "test_images",
         "test_conversion_fixes",
         "test_pdf_pages",
@@ -18,6 +20,7 @@ GROUPS = {
         "test_multi_image",
         "test_recent_engine",
         "test_merge_documents",
+        "test_merged_names",
         "test_spreadsheets",
         "test_word_slides",
     ],
@@ -25,6 +28,7 @@ GROUPS = {
     "rename": ["test_rename", "test_development2", "test_development4", "test_fill_down"],
     "window": [
         "test_ui",
+        "test_column_layout",
         "test_pdf_split_ui",
         "test_multi_image_ui",
         "test_development6",

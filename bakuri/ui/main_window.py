@@ -1,10 +1,11 @@
 """Main window coordinates views, requests and platform integration."""
 
 import sys, os, threading
+from collections import deque
 from pathlib import Path
 from build_channel import DEVELOPMENT, SETTINGS_APP
 from user_messages import friendly_error
-from PySide6.QtCore import Qt, QSettings, QEvent
+from PySide6.QtCore import Qt, QSettings, QEvent, QTimer
 from PySide6.QtGui import QColor, QBrush, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
@@ -19,8 +20,9 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QWidget,
 )
-from bakuri.domain.formats import SUPPORTED, can_convert, can_merge, IMAGES, PAGE_SPLIT_INPUTS
+from bakuri.domain.formats import SUPPORTED, can_convert, can_merge, IMAGES, PAGE_SPLIT_INPUTS, CAD
 from bakuri.application.control import JobControl
+from bakuri.application.progress import ProgressEstimate
 from settings_ui import SettingsDialog
 from theme import icon
 from help_ui import HelpDialog
@@ -40,7 +42,9 @@ class Window(QWidget):
         super().__init__()
         self.bus = Events()
         self.busy = False
+        self.pending_jobs = deque()
         self.control = None
+        self.estimate = ProgressEstimate()
         self.compression_rows = []
         self.job_kind = "convert"
         self.settings = QSettings("Bakuri", SETTINGS_APP)
@@ -55,14 +59,19 @@ class Window(QWidget):
         menu.addAction("사용 설명", self.open_help)
         self.tray.setContextMenu(menu)
         self.results = ResultsPresenter(self)
+        self.progress_timer = QTimer(self)
+        self.progress_timer.setInterval(1000)
+        self.progress_timer.timeout.connect(self.refresh_progress)
         self.last_result = None
         self.tray_result_action = menu.addAction("최근 결과 보기", self.show_last_result)
         self.tray_result_action.setEnabled(False)
         self.tray_stop_action = menu.addAction("작업 중지", self.request_stop)
         self.tray_stop_action.setEnabled(False)
+        self.tray_clear_action = menu.addAction("대기 작업 취소", self.clear_pending)
+        self.tray_clear_action.setEnabled(False)
         menu.addSeparator()
         menu.addAction("완전 종료", self.quit)
-        self.tray.setToolTip("바꾸리 개발용 · 대기 중")
+        self.tray.setToolTip("바꾸리 · 대기 중")
         self.tray.activated.connect(
             lambda reason: self.open_main("tray") if reason == QSystemTrayIcon.Trigger else None
         )
@@ -70,13 +79,14 @@ class Window(QWidget):
         from updater import UpdateController
 
         self.updater = UpdateController(self, self.settings, disabled=DEVELOPMENT)
-        self.popup = QuickPopup()
+        self.popup = QuickPopup(settings=self.settings)
         self.bus.clicked.connect(self.popup.clicked_at)
         self.bus.dismiss.connect(self.popup.hide)
         self.bus.popup_key.connect(self.popup.native_key)
         self.popup.chosen.connect(self.quick_selected)
         self.quick_paths = []
         self.bus.progress.connect(self.update_progress)
+        self.bus.measured.connect(self.update_work)
         self.files.paste_requested.connect(self.paste_files)
         QApplication.instance().installEventFilter(self)
         self.bus.message.connect(self.status.setText)
@@ -135,7 +145,7 @@ class Window(QWidget):
         return super().eventFilter(obj, event)
 
     def paste_files(self):
-        if self.busy or self.updater.installing:
+        if self.updater.installing:
             return
         mime = QApplication.clipboard().mimeData()
         paths = [u.toLocalFile() for u in mime.urls() if u.isLocalFile()] if mime else []
@@ -193,24 +203,31 @@ class Window(QWidget):
 
     def output_changed(self, format):
         paths = self.files.checked_paths()
+        has_direction = format.lower() == "pdf" and any(
+            Path(path).suffix.lower() in IMAGES | CAD for path in paths
+        )
+        self.paper_label.setVisible(has_direction)
+        self.paper_orientation.setVisible(has_direction)
+        self.paper_orientation.setEnabled(has_direction)
         single_pdf = (
             format.lower() == "pdf" and len(paths) == 1 and Path(paths[0]).suffix.lower() == ".pdf"
         )
         self.pdf_pages.setVisible(single_pdf)
-        self.pdf_pages.setEnabled(single_pdf and not self.busy)
+        self.pdf_pages.setEnabled(single_pdf)
         splitting = format == "페이지 나누기"
         self.individual.setVisible(not splitting)
         self.merge.setVisible(not single_pdf and not splitting)
         self.individual.setText("전체 저장" if single_pdf else "각각 저장")
         allowed = can_merge(paths, format)
-        self.merge.setEnabled(allowed and not self.busy)
+        self.merge.setEnabled(allowed)
         self.compression_profile.setVisible(format == "용량 축소")
-        if not self.busy:
-            self.run.setText(
-                {"용량 축소": "용량 축소 시작", "페이지 나누기": "페이지 나누기  →"}.get(
-                    format, "변환 시작  →"
-                )
+        self.run.setText(
+            "대기열에 추가"
+            if self.busy
+            else {"용량 축소": "용량 축소 시작", "페이지 나누기": "페이지 나누기  →"}.get(
+                format, "변환 시작  →"
             )
+        )
         if not allowed:
             self.individual.setChecked(True)
 
@@ -227,16 +244,22 @@ class Window(QWidget):
     def open_help(self):
         HelpDialog(self).exec()
 
+    def output_location_text(self):
+        mode = self.settings.value("output_mode", "source")
+        return {
+            "subfolder": "원본 폴더 안의 바꾸리 변환 폴더에 저장",
+            "custom": "지정한 폴더에 새 파일로 저장",
+        }.get(mode, "원본 폴더에 새 파일로 저장")
+
     def open_settings(self):
-        if self.busy:
-            return
-        SettingsDialog(self).exec()
+        if SettingsDialog(self).exec() == QDialog.Accepted:
+            self.status.setText(self.output_location_text())
         self.compression_profile.setCurrentIndex(
             self.compression_profile.findData(read_options(self.settings)["profile"])
         )
 
     def receive(self, selection):
-        if self.busy or (hasattr(self, "updater") and self.updater.installing):
+        if hasattr(self, "updater") and self.updater.installing:
             return
         paths, origin, tab = selection
         if sys.platform == "win32":
@@ -256,11 +279,8 @@ class Window(QWidget):
         if hasattr(self, "updater") and self.updater.installing:
             return
         if key == "more":
-            if not self.busy:
-                self.files.add_paths(self.quick_paths)
+            self.files.add_paths(self.quick_paths)
             self.open_main("expanded")
-            return
-        if self.busy:
             return
         if key == "hwp_merge":
             self.start_conversion(self.quick_paths, "hwpx", True, self.popup.geometry().center())
@@ -282,8 +302,6 @@ class Window(QWidget):
             self.start_conversion(self.quick_paths, key, merge, self.popup.geometry().center())
 
     def choose(self):
-        if self.busy:
-            return
         self.files.add_paths(
             QFileDialog.getOpenFileNames(
                 self,
@@ -301,9 +319,6 @@ class Window(QWidget):
                 self.files.takeItem(i)
 
     def start(self):
-        if self.busy:
-            self.request_stop()
-            return
         paths = self.files.checked_paths()
         if not paths:
             QMessageBox.information(self, "파일 선택", "변환할 파일의 체크박스를 선택해 주세요.")
@@ -322,7 +337,12 @@ class Window(QWidget):
             return
         fmt = self.fmt.currentText().lower()
         merge = self.merge.isChecked() and self.merge.isEnabled()
-        self.start_conversion(paths, fmt, merge)
+        orientation = (
+            self.paper_orientation.currentData()
+            if not self.paper_orientation.isHidden()
+            else "auto"
+        )
+        self.start_conversion(paths, fmt, merge, orientation=orientation)
 
     def multi_image_choices(self, files):
         from .multi_image import choose_multi_images
@@ -334,9 +354,7 @@ class Window(QWidget):
             QMessageBox.information(self, "이미지 확인", friendly_error(error, "conversion"))
             return None
 
-    def start_conversion(self, paths, fmt, merge, anchor=None):
-        if self.busy:
-            return
+    def start_conversion(self, paths, fmt, merge, anchor=None, *, orientation="auto"):
         if any(not can_convert(p, fmt) for p in paths):
             QMessageBox.information(
                 self,
@@ -348,11 +366,16 @@ class Window(QWidget):
         choices = self.multi_image_choices(files)
         if choices is None:
             return
-        request = ConversionRequest(files, fmt, merge, conversion_options(self.settings), choices)
+        try:
+            options = conversion_options(self.settings, orientation)
+        except ValueError as error:
+            QMessageBox.information(self, "변환 설정", str(error))
+            return
+        request = ConversionRequest(files, fmt, merge, options, choices)
         self.begin_job(request, "convert", anchor)
 
     def start_pdf_pages(self, paths):
-        if self.busy or self.updater.installing:
+        if self.updater.installing:
             return
         if len(paths) != 1 or Path(paths[0]).suffix.lower() not in PAGE_SPLIT_INPUTS:
             return
@@ -371,8 +394,6 @@ class Window(QWidget):
             self.begin_job(request, "convert")
 
     def start_compression(self, paths, anchor=None):
-        if self.busy:
-            return
         if any(Path(path).suffix.lower() not in IMAGES | {".pdf"} for path in paths):
             QMessageBox.information(self, "파일 확인", "용량 축소는 이미지와 PDF만 지원합니다.")
             return
@@ -388,34 +409,46 @@ class Window(QWidget):
         self.begin_job(request, "compress", anchor)
 
     def begin_job(self, operation, kind, anchor=None):
-        if self.busy or self.updater.installing:
+        if self.updater.installing:
             return
-        self.mode_tabs.setEnabled(False)
+        # Requests already contain immutable paths and options, captured at submission.
+        if self.busy:
+            self.pending_jobs.append((operation, kind, anchor))
+            self.tray_clear_action.setEnabled(True)
+            self.tray_clear_action.setText(f"대기 작업 취소 ({len(self.pending_jobs)}개)")
+            self.refresh_progress()
+            if self.settings.value("notify", True, type=bool):
+                self.results.toast.queued(
+                    self.estimate.label(len(self.pending_jobs)),
+                    len(self.pending_jobs),
+                    self.tray.geometry(),
+                )
+                self.results.toast.set_progress(self.estimate.percent)
+            return
+        self.start_job(operation, kind, anchor)
+
+    def start_job(self, operation, kind, anchor=None):
+        # Renaming a queued input would invalidate its path. Conversion controls remain live.
+        self.mode_tabs.setCurrentIndex(0)
+        self.mode_tabs.setTabEnabled(1, False)
         self.rename_panel.setEnabled(False)
         self.popup.hide()
         self.busy = True
         self.job_kind = kind
-        self.control = JobControl(self.bus.progress.emit)
+        self.control = JobControl(self.bus.progress.emit, self.bus.measured.emit)
         control = self.control
-        self.compression_rows = []
-        self.output_folders = []
-        self.notification_folders = []
-        self.run.setText("작업 중지")
-        self.run.setEnabled(True)
-        self.files.setEnabled(False)
-        self.toolbar.setEnabled(False)
-        self.fmt.setEnabled(False)
-        self.compression_profile.setEnabled(False)
-        self.individual.setEnabled(False)
-        self.merge.setEnabled(False)
-        self.pdf_pages.setEnabled(False)
-        self.status.setText("0% · 작업 준비")
+        self.estimate = ProgressEstimate()
+        self.stop_job.setToolTip("현재 작업만 중지합니다. 대기 작업은 이어서 처리합니다.")
+        self.stop_job.show()
+        self.stop_job.setEnabled(True)
+        self.output_changed(self.fmt.currentText())
         self.tray_stop_action.setEnabled(True)
-        self.tray.setToolTip(
-            "바꾸리 · " + ("용량 축소" if kind == "compress" else "파일 변환") + " 중 · 0%"
-        )
         if self.settings.value("notify", True, type=bool):
-            self.results.toast.start_progress("0% · 작업 준비", self.tray.geometry())
+            self.results.toast.start_progress(
+                self.estimate.label(len(self.pending_jobs)), self.tray.geometry()
+            )
+        self.refresh_progress()
+        self.progress_timer.start()
         done = self.bus.done.emit
 
         def work():
@@ -425,40 +458,57 @@ class Window(QWidget):
         self.worker.start()
 
     def update_progress(self, percent, text):
+        if not self.busy or (self.control and self.control.cancelled.is_set()):
+            return
+        self.estimate.update(percent, text)
+        self.results.toast.set_progress(self.estimate.percent)
+        self.refresh_progress()
+
+    def update_work(self, done, total, stage):
+        if not self.busy or (self.control and self.control.cancelled.is_set()):
+            return
+        self.estimate.measure(done, total, stage)
+        self.refresh_progress()
+
+    def refresh_progress(self):
         if not self.busy:
             return
         if self.control and self.control.cancelled.is_set():
-            return
-        progress = f"{percent}% · {text}"
-        self.status.setText(progress)
-        self.results.toast.update_progress(progress)
-        label = "용량 축소" if self.job_kind == "compress" else "파일 변환"
-        self.tray.setToolTip(f"바꾸리 · {label} 중 · {percent}%\n{text}"[:127])
+            text = f"중지 요청 중 · 대기 {len(self.pending_jobs)}개"
+        else:
+            text = self.estimate.label(len(self.pending_jobs))
+        self.status.setText(text)
+        self.results.toast.update_progress(text)
+        self.tray.setToolTip(("바꾸리 · " + text)[:127])
+
+    def clear_pending(self):
+        self.pending_jobs.clear()
+        self.tray_clear_action.setEnabled(False)
+        self.tray_clear_action.setText("대기 작업 취소")
+        self.results.toast.set_notice("대기 작업을 취소했습니다. 진행 중인 작업은 계속합니다.")
+        self.refresh_progress()
 
     def request_stop(self):
         if not self.busy or self.control is None:
             return
         self.control.cancel()
-        self.run.setText("중지 요청 중")
-        self.run.setEnabled(False)
+        self.stop_job.setText("중지 요청 중")
+        self.stop_job.setEnabled(False)
         self.tray_stop_action.setEnabled(False)
         self.tray.setToolTip("바꾸리 · 중지 요청 중")
         self.status.setText("중지 요청 중 · 현재 처리 단계가 반환되면 중지합니다.")
         self.results.toast.update_progress("중지 요청 중")
 
     def reset(self):
+        self.progress_timer.stop()
         if self.results.toast.showing_progress:
             self.results.toast.hide()
-        self.mode_tabs.setEnabled(True)
-        self.rename_panel.setEnabled(True)
         self.busy = False
         self.control = None
-        self.run.setEnabled(True)
-        self.files.setEnabled(True)
-        self.toolbar.setEnabled(True)
-        self.fmt.setEnabled(True)
-        self.compression_profile.setEnabled(True)
-        self.individual.setEnabled(True)
+        self.stop_job.hide()
+        self.stop_job.setText("작업 중지")
+        self.mode_tabs.setTabEnabled(1, not self.pending_jobs)
+        self.rename_panel.setEnabled(not self.pending_jobs)
         self.output_changed(self.fmt.currentText())
         self.tray_stop_action.setEnabled(False)
 
@@ -474,6 +524,14 @@ class Window(QWidget):
 
     def finished(self, result):
         self.results.finished(result)
+        # Start synchronously after presenting the result: no idle gap can reorder submissions.
+        if self.pending_jobs:
+            operation, kind, anchor = self.pending_jobs.popleft()
+            previous = self.last_result["summary"].split("\n")[0] if self.last_result else ""
+            self.tray_clear_action.setEnabled(bool(self.pending_jobs))
+            self.tray_clear_action.setText(f"대기 작업 취소 ({len(self.pending_jobs)}개)")
+            self.start_job(operation, kind, anchor)
+            self.results.toast.set_notice("이전 작업 결과: " + previous)
 
     def status_link(self, link):
         return self.results.status_link(link)

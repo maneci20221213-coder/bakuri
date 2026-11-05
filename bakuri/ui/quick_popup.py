@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 from PySide6.QtCore import Qt, Signal, QTimer, QEvent, QPoint
-from PySide6.QtGui import QCursor
+from PySide6.QtGui import QCursor, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QGraphicsDropShadowEffect,
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from bakuri.domain.formats import PAGE_SPLIT_INPUTS, IMAGES, HANCOM, SPREADSHEETS
+from bakuri.domain.quick_actions import ACTIONS, DIRECTIONS, action_available, selection_profile
 from theme import icon
 
 
@@ -21,14 +22,15 @@ class QuickPopup(QWidget):
     chosen = Signal(str)
     visibility = Signal(bool)
 
-    def __init__(self, animate=None):
+    def __init__(self, animate=None, settings=None):
         super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedSize(350, 264)
         self.setFocusPolicy(Qt.StrongFocus)
+        self.settings = settings
         self.preparing = False
         self.setStyleSheet(
-            'QuickPopup {background:transparent;} QPushButton {background:rgba(255,255,255,225);color:#26354A;border:1px solid rgba(218,228,242,230);border-radius:12px;padding:0;} QPushButton:hover {background:rgba(239,246,255,245);border-color:#96C1F8;} QPushButton[selected="true"] {background:rgba(244,249,255,245);border:2px solid #2E83F2;} QLabel {background:transparent;border:0;color:#26354A;font-family:"Malgun Gothic","Noto Sans CJK KR",sans-serif;}'
+            'QuickPopup {background:transparent;} QPushButton {background:rgba(255,255,255,225);color:#26354A;border:1px solid rgba(218,228,242,230);border-radius:12px;padding:0;} QPushButton:hover {background:rgba(239,246,255,245);border-color:#96C1F8;} QPushButton[selected="true"] {background:rgba(244,249,255,245);border:2px solid #2E83F2;} QLabel {background:transparent;border:0;color:#26354A;font-family:"Malgun Gothic","Noto Sans CJK KR",sans-serif;} QPushButton:disabled {background:rgba(233,237,243,225);border-color:#d5dce5;} QLabel:disabled {color:#758195;}'
         )
 
         self.actions = {}
@@ -188,17 +190,29 @@ class QuickPopup(QWidget):
             labels["pdf"] = ("페이지 나누기" if single else "한글 합치기", "hwpx")
             labels["png"] = ("PDF 변환", "pdf")
             labels["jpeg"] = ("PNG 변환", "png")
-        for key, (label, asset) in labels.items():
+        labels["more"] = ACTIONS["more"]
+        profile = selection_profile(extensions)
+        if profile == "cad":
+            labels["pdf"] = ACTIONS["pdf"]
+            labels["png"] = ACTIONS["png"]
+            labels["jpeg"] = ACTIONS["jpeg"]
+        for key in DIRECTIONS:
+            custom = self.settings.value(f"quick_menu/{profile}/{key}", "") if self.settings else ""
+            if custom in ACTIONS:
+                self.actions[key] = custom
+                labels[key] = ACTIONS[custom]
+            action = self.actions.get(key, key)
+            label, asset = labels[key]
+            if action == "pdf_split" and hancom:
+                asset = "hwpx"
             button = self.buttons[key]
+            available = action_available(action, paths)
             button.setAccessibleName(label)
-            button.layout().itemAt(0).widget().setPixmap(icon(asset).pixmap(30, 32))
+            mode = QIcon.Normal if available else QIcon.Disabled
+            button.layout().itemAt(0).widget().setPixmap(icon(asset).pixmap(30, 32, mode))
             button.layout().itemAt(1).widget().setText(label)
-        self.buttons["pdf"].setEnabled(True)
-        self.buttons["pdf"].setToolTip(
-            "일정 페이지마다 나누거나 원하는 페이지를 추출합니다."
-            if (pdfs or hancom) and len(paths) == 1
-            else ""
-        )
+            button.setEnabled(available)
+            button.setToolTip("" if available else "선택한 파일에는 이 기능을 사용할 수 없습니다.")
         self.buttons["hwpx"].setVisible(
             bool(paths) and all(Path(p).suffix.lower() == ".hwp" for p in paths)
         )
@@ -209,7 +223,7 @@ class QuickPopup(QWidget):
             bool(paths) and all(Path(p).suffix.lower() in IMAGES | {".pdf"} for p in paths)
         )
         self.note.setText(f"{len(paths)}개 파일 · 방향키 → Enter · Esc 닫기")
-        self.current = "pdf"
+        self.current = next((key for key in DIRECTIONS if self.buttons[key].isEnabled()), None)
         point = QCursor.pos()
         screen = QApplication.screenAt(point) or QApplication.primaryScreen()
         rect = screen.availableGeometry()
@@ -261,6 +275,9 @@ class QuickPopup(QWidget):
 
     def pick(self, key):
         if not self.isVisible() or self.motion.closing:
+            return
+        button = self.buttons.get(key)
+        if button is None or not button.isVisible() or not button.isEnabled():
             return
         action = self.actions.get(key, key)
         self.motion.close(lambda: self.chosen.emit(action))
@@ -320,7 +337,17 @@ class QuickPopup(QWidget):
             neighbors["pdf"][Qt.Key_Right] = "pdf_split"
             neighbors["jpeg"][Qt.Key_Up] = "pdf_split"
             neighbors["pdf_split"] = {Qt.Key_Left: "pdf", Qt.Key_Down: "jpeg"}
-        target = neighbors.get(self.current, {}).get(key)
+        if self.current is None:
+            target = {
+                Qt.Key_Up: "pdf",
+                Qt.Key_Down: "more",
+                Qt.Key_Left: "png",
+                Qt.Key_Right: "jpeg",
+            }[key]
+        else:
+            target = neighbors.get(self.current, {}).get(key)
+        while target and not self.buttons[target].isEnabled():
+            target = neighbors.get(target, {}).get(key)
         if target:
             self.select(target)
 
@@ -335,7 +362,9 @@ class QuickPopup(QWidget):
                 for k in ("pdf", "png", "hwpx", "xlsx", "compress", "jpeg", "pdf_split", "more")
                 if self.buttons[k].isVisible() and self.buttons[k].isEnabled()
             ]
-            self.select(visible[(visible.index(self.current) + 1) % len(visible)])
+            if visible:
+                index = visible.index(self.current) + 1 if self.current in visible else 0
+                self.select(visible[index % len(visible)])
         elif key in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space):
             self.pick(self.current)
         elif key == Qt.Key_Escape:

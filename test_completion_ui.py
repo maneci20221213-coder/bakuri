@@ -53,7 +53,10 @@ class CompletionUiTests(unittest.TestCase):
         toast.start_progress("0% · 작업 준비", w.tray.geometry())
         w.busy = True
         w.update_progress(37, "처리 중")
-        self.assertEqual(toast.summary.text(), "37% · 처리 중")
+        self.assertTrue(toast.summary.text().startswith("37% · 처리 중"))
+        self.assertIn("남은 시간 계산 중", toast.summary.text())
+        self.assertEqual(toast.progress_bar.value(), 37)
+        self.assertEqual(toast.progress_bar.text(), "37%")
         self.assertFalse(toast.actions.isVisible())
         self.assertFalse(toast.timer.isActive())
         w.results.finished(
@@ -98,6 +101,36 @@ class CompletionUiTests(unittest.TestCase):
             toast.folder.click()
             open_folder.assert_called_once_with([self.temp.name])
         self.assertFalse(toast.isVisible())
+
+    def test_repeated_failure_after_progress_stays_inside_work_area(self):
+        from PySide6.QtCore import QRect
+        from bakuri.application.runner import run_job
+        from bakuri.application.control import JobControl
+        from bakuri.conversion.cad import CadError
+        from user_messages import friendly_error
+
+        screen = APP.primaryScreen().availableGeometry()
+        tray = QRect(screen.right() - 20, screen.bottom() - 20, 16, 16)
+        w = self.window
+        toast = w.results.toast
+        message = "DWG를 변환하려면 ODA File Converter를 설치하거나 DXF로 저장해 주세요."
+
+        def fail(control):
+            raise CadError(message)
+
+        report = run_job(fail, JobControl(), "convert", friendly_error)
+        with patch.object(w.tray, "geometry", return_value=tray):
+            for _ in range(3):
+                toast.start_progress("0% · 작업 준비", tray)
+                w.results.finished(report)
+                APP.processEvents()
+                self.assertIn(message, toast.summary.text())
+                self.assertTrue(screen.contains(toast.geometry()))
+                self.assertTrue(
+                    toast.rect().contains(
+                        toast.actions.geometry().translated(toast.actions.parentWidget().pos())
+                    )
+                )
 
     def test_rename_titles_are_evenly_spaced_and_placeholder_removed(self):
         w = self.window

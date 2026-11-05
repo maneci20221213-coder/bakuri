@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QProgressBar,
 )
 
 
@@ -62,6 +63,16 @@ class CompletionToast(QWidget):
         self.summary.setTextFormat(Qt.PlainText)
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(1)
+        self.progress_bar.hide()
+        layout.addWidget(self.progress_bar)
+        self.notice = QLabel()
+        self.notice.setTextFormat(Qt.PlainText)
+        self.notice.setWordWrap(True)
+        self.notice.hide()
+        layout.addWidget(self.notice)
         self.actions = QWidget()
         actions = QHBoxLayout(self.actions)
         actions.setContentsMargins(0, 0, 0, 0)
@@ -79,6 +90,7 @@ class CompletionToast(QWidget):
         self.timer.setSingleShot(True)
         self.timer.timeout.connect(self.hide)
         self.showing_progress = False
+        self.anchor = None
 
     def activate_action(self, action):
         self.hide()
@@ -89,6 +101,9 @@ class CompletionToast(QWidget):
         self.showing_progress = True
         self.title.setText("바꾸리 작업 중")
         self.actions.hide()
+        self.progress_bar.setValue(1)
+        self.progress_bar.show()
+        self.notice.hide()
         self.progress_rect = tray_rect
         self.update_progress(text)
         self.show()
@@ -98,9 +113,25 @@ class CompletionToast(QWidget):
             self.summary.setText(text)
             self.place(self.progress_rect)
 
+    def set_progress(self, percent):
+        self.progress_bar.setValue(percent)
+
+    def set_notice(self, text):
+        self.notice.setText(text)
+        self.notice.setVisible(bool(text))
+        self.place(getattr(self, "progress_rect", None))
+
+    def queued(self, progress, count, tray_rect):
+        if not self.showing_progress:
+            self.start_progress(progress, tray_rect)
+        self.set_notice(f"대기열에 추가했습니다 · 대기 {count}개")
+        self.show()
+
     def present(self, summary, has_folder, warning=False, tray_rect=None):
         self.showing_progress = False
         self.actions.show()
+        self.progress_bar.hide()
+        self.notice.hide()
         self.title.setText("작업 결과를 확인해 주세요" if warning else "바꾸리 작업 결과")
         self.summary.setText(summary)
         self.folder.setEnabled(has_folder)
@@ -109,16 +140,30 @@ class CompletionToast(QWidget):
         self.timer.start(12000)
 
     def place(self, tray_rect):
-        self.adjustSize()
-        position = (
+        self.anchor = (
             tray_rect.center() if tray_rect is not None and tray_rect.isValid() else QCursor.pos()
         )
-        screen = QApplication.screenAt(position) or QApplication.primaryScreen()
+        layout = self.layout()
+        layout.invalidate()
+        layout.activate()
+        # The content wraps at a fixed width; calculate the height at that width
+        # before anchoring, even when the previous card is still on screen.
+        self.resize(self.width(), layout.totalHeightForWidth(self.width()))
+        self.move_to_anchor()
+
+    def move_to_anchor(self):
+        if self.anchor is None:
+            return
+        screen = QApplication.screenAt(self.anchor) or QApplication.primaryScreen()
         area = screen.availableGeometry()
         self.move(
-            max(area.left(), area.right() - self.width() - 15),
-            max(area.top(), area.bottom() - self.height() - 15),
+            max(area.left(), area.right() + 1 - self.width() - 15),
+            max(area.top(), area.bottom() + 1 - self.height() - 15),
         )
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.move_to_anchor()
 
     def hideEvent(self, event):
         self.showing_progress = False

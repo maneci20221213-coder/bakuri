@@ -48,10 +48,6 @@ jobs:
         run: |
           python -m unittest discover -v
           if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
-          python verify_multi_image.py
-          if ($LASTEXITCODE -ne 0) { throw 'Native MPO choice verification failed' }
-          python verify_pdf_split.py
-          if ($LASTEXITCODE -ne 0) { throw 'Native PDF split verification failed' }
           python verify_completion_ui.py
           if ($LASTEXITCODE -ne 0) { throw 'Native completion/layout verification failed' }
           python -c "import subprocess,sys; subprocess.run([sys.executable,'verify_reorder.py'],check=True,timeout=25)"

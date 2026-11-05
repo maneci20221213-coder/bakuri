@@ -9,9 +9,12 @@ class Cancelled(Exception):
 
 
 class JobControl:
-    def __init__(self, progress=lambda percent, text: None):
+    def __init__(
+        self, progress=lambda percent, text: None, measurement=lambda done, total, stage: None
+    ):
         self.cancelled = threading.Event()
         self.callback = progress
+        self.measurement = measurement
         self.percent = 0
         self.outputs = []
         self.rows = []
@@ -28,6 +31,11 @@ class JobControl:
         self.check()
         self.percent = max(self.percent, min(99, int(percent)))
         self.callback(self.percent, text)
+
+    def measure_units(self, done, total, stage):
+        """Report observable work separately from the overall weighted percentage."""
+        self.check()
+        self.measurement(int(done), int(total), stage)
 
     def complete(self):
         self.check()

@@ -5,7 +5,7 @@ import tempfile
 from PIL import Image
 import fitz
 from image_inputs import frames, white_rgb, save_png
-from bakuri.domain.formats import IMAGES, HANCOM, SUPPORTED, can_convert, can_merge
+from bakuri.domain.formats import IMAGES, HANCOM, CAD, SUPPORTED, can_convert, can_merge
 from bakuri.application.control import JobControl
 from merged_names import merged_path
 from .office import OfficeSession
@@ -13,7 +13,18 @@ from .pdf import to_pdf
 
 
 def convert(
-    files, fmt, merge=False, progress=lambda s: None, dpi=150, image_mode="background", control=None
+    files,
+    fmt,
+    merge=False,
+    progress=lambda s: None,
+    dpi=150,
+    image_mode="background",
+    control=None,
+    *,
+    orientation="auto",
+    output_mode="source",
+    output_folder="",
+    source_folders=None,
 ):
     files = [Path(p).resolve() for p in files]
     fmt = fmt.lower()
@@ -39,6 +50,19 @@ def convert(
         control.check()
         progress(text)
 
+    def publish(staged, desired):
+        if output_mode != "source":
+            folder = (source_folders or {}).get(desired.parent, desired.parent)
+            folder = (
+                folder / "바꾸리 변환"
+                if output_mode == "subfolder"
+                else Path(output_folder).resolve()
+            )
+            control.check()
+            folder.mkdir(parents=True, exist_ok=True)
+            desired = folder / desired.name
+        return control.publish(staged, desired)
+
     with OfficeSession() as session, tempfile.TemporaryDirectory() as td:
         session.control = control
         td = Path(td)
@@ -47,7 +71,7 @@ def convert(
             temp = td / "merged.pptx"
             session.slides_document(files, temp, td, dpi)
             control.check()
-            results.append(control.publish(temp, merged_path(files, "pptx")))
+            results.append(publish(temp, merged_path(files, "pptx", source_folders=source_folders)))
         elif merge and fmt == "hwpx":
             session.advance = lambda f, t: control.update(f * 95, t)
             temp = td / "merged.hwpx"
@@ -58,11 +82,19 @@ def convert(
             else:
                 session.image_document(files, temp, td, image_mode, message)
             control.check()
-            results.append(control.publish(temp, merged_path(files, "hwpx")))
+            results.append(publish(temp, merged_path(files, "hwpx", source_folders=source_folders)))
         else:
+            weights = (
+                [max(1, p.stat().st_size) for p in files]
+                if all(p.suffix.lower() in CAD for p in files)
+                else [1] * len(files)
+            )
+            total_weight = sum(weights)
+            completed_weight = 0
             for index, src in enumerate(files):
-                base = index * 90 / len(files)
-                width = 90 / len(files)
+                base = completed_weight * 90 / total_weight
+                width = weights[index] * 90 / total_weight
+                completed_weight += weights[index]
 
                 def advance(fraction, text=""):
                     control.update(base + width * min(0.98, fraction), text or src.name)
@@ -98,14 +130,29 @@ def convert(
                         name = (
                             f"{src.stem}.{fmt}" if pages == 1 else f"{src.stem}_{number+1:03}.{fmt}"
                         )
-                        results.append(control.publish(temp, src.with_name(name)))
+                        results.append(publish(temp, src.with_name(name)))
                         advance(0.1 + 0.8 * (number + 1) / pages)
                     continue
                 else:
                     pdf = src if src.suffix.lower() == ".pdf" else td / f"{index}.pdf"
                     advance(0.05)
                     if pdf != src:
-                        to_pdf(src, pdf, session, control, advance)
+                        to_pdf(
+                            src,
+                            pdf,
+                            session,
+                            control,
+                            (
+                                (
+                                    lambda fraction, text="": advance(
+                                        fraction * (0.94 if fmt == "pdf" else 0.35), text
+                                    )
+                                )
+                                if src.suffix.lower() in CAD
+                                else advance
+                            ),
+                            orientation=orientation if fmt == "pdf" else "auto",
+                        )
                     control.check()
                     advance(0.35)
                     if fmt == "pdf":
@@ -134,11 +181,11 @@ def convert(
                                     if len(document) == 1
                                     else f"{src.stem}_{number+1:03}.{fmt}"
                                 )
-                                results.append(control.publish(temp, src.with_name(name)))
+                                results.append(publish(temp, src.with_name(name)))
                                 advance(0.35 + 0.6 * (number + 1) / len(document))
                         continue
                 advance(0.95)
-                results.append(control.publish(temp, src.with_suffix("." + fmt)))
+                results.append(publish(temp, src.with_suffix("." + fmt)))
             if merge:
                 merged = td / "merged.pdf"
                 with fitz.open() as document:
@@ -151,9 +198,13 @@ def convert(
                             document.insert_pdf(part)
                             control.check()
                     control.check()
-                    document.save(merged, garbage=4, deflate=True, deflate_images=True)
+                    document.save(
+                        merged, garbage=4, deflate=True, deflate_images=True, use_objstms=1
+                    )
                     control.check()
-                results.append(control.publish(merged, merged_path(files, "pdf")))
+                results.append(
+                    publish(merged, merged_path(files, "pdf", source_folders=source_folders))
+                )
         control.update(99, "저장 확인")
     control.complete()
     return results

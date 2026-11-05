@@ -12,3 +12,4 @@ class Events(QObject):
     dismiss = Signal()
     popup_key = Signal(int)
     progress = Signal(int, str)
+    measured = Signal(int, int, str)

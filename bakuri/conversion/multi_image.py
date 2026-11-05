@@ -179,7 +179,9 @@ def _stage_frame(path, info, span, target, control):
 
 class _Publication(JobControl):
     def __init__(self, parent, folders):
-        super().__init__(lambda percent, text: parent.update(5 + percent * 0.93, text))
+        super().__init__(
+            lambda percent, text: parent.update(5 + percent * 0.93, text), parent.measure_units
+        )
         self.cancelled = parent.cancelled
         self.outputs = parent.outputs
         self.parent = parent
@@ -240,9 +242,9 @@ def process_selected_images(request, selections, control):
                 paths,
                 request.output.value,
                 merge,
-                dpi=request.options.dpi,
-                image_mode=request.options.image_mode,
                 control=publication,
+                source_folders=folders,
+                **request.options.as_kwargs(),
             )
         else:
             try:

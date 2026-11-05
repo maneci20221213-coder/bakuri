@@ -42,9 +42,9 @@ class DevelopmentUiTests(unittest.TestCase):
    self.assertEqual(self.w.files.count(),2);self.assertEqual(p.read_bytes(),b'unchanged')
   self.w.rename_panel.find.setFocus();APP.clipboard().setText('복사한 문구');QTest.keyClick(self.w.rename_panel.find,Qt.Key_V,Qt.ControlModifier)
   self.assertEqual(self.w.rename_panel.find.text(),'복사한 문구');self.assertEqual(self.w.files.count(),2)
- def test_busy_paste_is_ignored(self):
+ def test_busy_paste_adds_files_for_next_job(self):
   p=self.file('a.pdf');mime=QMimeData();mime.setUrls([QUrl.fromLocalFile(str(p))]);APP.clipboard().setMimeData(mime)
-  self.w.busy=True;self.w.paste_files();self.assertEqual(self.w.files.count(),0);self.w.busy=False
+  self.w.busy=True;self.w.paste_files();self.assertEqual(self.w.files.count(),1);self.w.busy=False
  def test_per_file_text_survives_sort_uncheck_and_rename_undo(self):
   b=self.file('b.txt');a=self.file('a.txt');w=self.w;w.mode_tabs.setCurrentIndex(1);w.files.add_paths([str(b),str(a)]);panel=w.rename_panel
   panel.text_enabled.setChecked(True);panel.assign_values(['부산','서울']);w.files.sort_names()

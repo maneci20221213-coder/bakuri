@@ -40,7 +40,8 @@ with tempfile.TemporaryDirectory() as folder:
             request=begin.call_args.args[0]
         control=JobControl();execute(request,control)
         assert len(control.outputs)==2
-        assert all(Path(p).parent==source.parent.resolve() and Path(p).is_file() for p in control.outputs)
+        group=source.parent.resolve()/'바꾸리 변환'
+        assert all(Path(p).parent==group and Path(p).is_file() for p in control.outputs)
         with patch.object(w,'begin_job') as begin:
             QTimer.singleShot(50,lambda:choose('primary'))
             w.quick_paths=[str(source)];w.quick_selected('compress')
@@ -48,6 +49,7 @@ with tempfile.TemporaryDirectory() as folder:
             request=begin.call_args.args[0]
         control=JobControl();execute(request,control)
         assert len(control.outputs)==1 and len(control.rows)==1
+        assert Path(control.outputs[0]).parent==source.parent.resolve()
         assert '대표 이미지만 선택' in control.rows[0]['detail']
         assert control.rows[0]['source']==str(source.resolve())
         assert source.read_bytes()==original

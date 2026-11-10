@@ -89,6 +89,45 @@ class CompletionUiTests(unittest.TestCase):
             self.assertEqual(w.last_result["summary"], "1개 저장 완료")
             self.assertTrue(w.tray_result_action.isEnabled())
 
+    def test_multiline_compression_footer_renders_links_and_escapes_notes(self):
+        w = self.window
+        row = dict(
+            source="photo.jpg",
+            output=str(Path(self.temp.name) / "photo_용량축소.jpeg"),
+            before=6_850_000,
+            after=2_090_000,
+            status="저장 완료",
+        )
+        w.finished(
+            dict(
+                paths=[row["output"]],
+                rows=[row],
+                kind="compress",
+                outcome="done",
+                error="",
+                notes=['<a href="unexpected">파일 이름 & 안내</a>'],
+            )
+        )
+        w.status.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.LinksAccessibleByMouse)
+        rendered = w.last_result["summary"] + " · 저장 폴더 열기 · 상세 결과"
+        w.status.setSelection(0, len(rendered))
+        visible = w.status.selectedText()
+        self.assertIn("4.76 MB 절감", visible)
+        self.assertIn("저장 폴더 열기", visible)
+        self.assertIn("상세 결과", visible)
+        self.assertNotIn('style="', visible)
+        self.assertIn('<a href="unexpected">파일 이름 & 안내</a>', visible)
+        with patch.object(w, "open_folders") as open_folder:
+            w.status.linkActivated.emit("open")
+            open_folder.assert_called_once_with([self.temp.name])
+        with patch("bakuri.ui.results.CompressionResults") as details:
+            w.status.linkActivated.emit("details")
+            details.assert_called_once_with([row], w)
+            details.return_value.exec.assert_called_once()
+        w.status.setText("작업 준비 중")
+        w.status.setSelection(0, len(w.status.text()))
+        self.assertEqual(w.status.selectedText(), "작업 준비 중")
+
     def test_repeated_completion_refreshes_one_card_and_folder_action(self):
         w = self.window
         w.show_completion("첫 결과", [])

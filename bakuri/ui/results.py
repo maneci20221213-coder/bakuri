@@ -1,6 +1,7 @@
 """Completion-only notifications, recent results and output folder actions."""
 
 from pathlib import Path
+from html import escape
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices, QCursor
 from PySide6.QtWidgets import (
@@ -141,7 +142,10 @@ class ResultsPresenter:
             links.append(
                 '<a style="color:#2E83F2;text-decoration:none" href="details">상세 결과</a>'
             )
-        window.status.setText(summary + (" · " + " · ".join(links) if links else ""))
+        status = escape(summary).replace("\n", "<br>")
+        window.status.setText(
+            "<html>" + status + (" · " + " · ".join(links) if links else "") + "</html>"
+        )
         if outcome == "failed":
             summary += (
                 "\n"

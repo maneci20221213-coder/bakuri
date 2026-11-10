@@ -33,7 +33,7 @@ from .main_view import build_main_view
 from .settings_store import initialize_settings
 from .results import ResultsPresenter
 from bakuri.application.runner import run_job
-from bakuri.application.settings import conversion_options, compression_options
+from bakuri.application.settings import conversion_options, compression_options, output_location
 from bakuri.domain.models import ConversionRequest, CompressionRequest, PdfPagesRequest
 
 
@@ -247,11 +247,12 @@ class Window(QWidget):
         HelpDialog(self).exec()
 
     def output_location_text(self):
-        mode = self.settings.value("output_mode", "source")
+        mode = self.settings.value("output_mode", "smart")
         return {
+            "source": "원본 폴더에 새 파일로 저장",
             "subfolder": "원본 폴더 안의 바꾸리 변환 폴더에 저장",
             "custom": "지정한 폴더에 새 파일로 저장",
-        }.get(mode, "원본 폴더에 새 파일로 저장")
+        }.get(mode, "결과 하나는 원본 폴더, 여러 개는 새 폴더에 저장")
 
     def open_settings(self):
         if SettingsDialog(self).exec() == QDialog.Accepted:
@@ -386,18 +387,26 @@ class Window(QWidget):
 
         self.popup.hide()
         try:
+            location = output_location(self.settings)
             count = pdf_page_count(paths[0]) if Path(paths[0]).suffix.lower() == ".pdf" else None
         except Exception as error:
             QMessageBox.information(self, "PDF 확인", friendly_error(error, "conversion"))
             return
         dialog = PdfSplitDialog(paths[0], count, self)
         if dialog.exec() == QDialog.Accepted:
-            request = PdfPagesRequest(self.files.inputs_for(paths)[0], **dialog.options())
+            request = PdfPagesRequest(
+                self.files.inputs_for(paths)[0], location=location, **dialog.options()
+            )
             self.begin_job(request, "convert")
 
     def start_compression(self, paths, anchor=None):
         if any(Path(path).suffix.lower() not in IMAGES | {".pdf"} for path in paths):
             QMessageBox.information(self, "파일 확인", "용량 축소는 이미지와 PDF만 지원합니다.")
+            return
+        try:
+            location = output_location(self.settings)
+        except ValueError as error:
+            QMessageBox.information(self, "변환 설정", str(error))
             return
         options = read_options(self.settings)
         self.compression_profile.setCurrentIndex(
@@ -407,7 +416,7 @@ class Window(QWidget):
         choices = self.multi_image_choices(files)
         if choices is None:
             return
-        request = CompressionRequest(files, compression_options(self.settings), choices)
+        request = CompressionRequest(files, compression_options(self.settings), choices, location)
         self.begin_job(request, "compress", anchor)
 
     def begin_job(self, operation, kind, anchor=None):

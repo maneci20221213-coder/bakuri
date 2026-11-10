@@ -103,7 +103,14 @@ class MultiImageTests(unittest.TestCase):
         for fmt in ("pdf", "png"):
             control = JobControl()
             execute(
-                ConversionRequest(self.files, fmt, True, multi_images=self.choices("all")), control
+                ConversionRequest(
+                    self.files,
+                    fmt,
+                    True,
+                    ConversionOptions(output_mode="source"),
+                    self.choices("all"),
+                ),
+                control,
             )
             self.assertEqual(
                 [Path(p).name for p in control.outputs], [f"사진_01.{fmt}", f"사진_02.{fmt}"]

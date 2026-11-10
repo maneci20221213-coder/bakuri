@@ -44,11 +44,23 @@ class InputFile:
 
 
 @dataclass(frozen=True, slots=True)
+class OutputLocation:
+    mode: str = "smart"
+    folder: str = ""
+
+    def __post_init__(self):
+        if self.mode not in {"smart", "source", "subfolder", "custom"}:
+            raise ValueError("변환 파일 저장 위치를 확인해 주세요.")
+        if self.mode == "custom" and not Path(self.folder).is_absolute():
+            raise ValueError("변환 파일을 저장할 폴더를 지정해 주세요.")
+
+
+@dataclass(frozen=True, slots=True)
 class ConversionOptions:
     dpi: int = 150
     image_mode: str = "background"
     orientation: str = "auto"
-    output_mode: str = "source"
+    output_mode: str = "smart"
     output_folder: str = ""
 
     def __post_init__(self):
@@ -59,13 +71,17 @@ class ConversionOptions:
 
         if self.orientation not in {"auto", "landscape", "portrait"}:
             raise ValueError("PDF 용지 방향을 확인해 주세요.")
-        if self.output_mode not in {"source", "subfolder", "custom"}:
-            raise ValueError("변환 파일 저장 위치를 확인해 주세요.")
-        if self.output_mode == "custom" and not Path(self.output_folder).is_absolute():
-            raise ValueError("변환 파일을 저장할 폴더를 지정해 주세요.")
+        OutputLocation(self.output_mode, self.output_folder)
 
-    def as_kwargs(self):
-        return {field: getattr(self, field) for field in self.__dataclass_fields__}
+    @property
+    def location(self):
+        return OutputLocation(self.output_mode, self.output_folder)
+
+    def as_kwargs(self, *, include_location=True):
+        options = dict(dpi=self.dpi, image_mode=self.image_mode, orientation=self.orientation)
+        if include_location:
+            options.update(output_mode=self.output_mode, output_folder=self.output_folder)
+        return options
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +131,7 @@ class CompressionRequest:
     files: tuple[InputFile, ...]
     options: CompressionOptions = field(default_factory=CompressionOptions)
     multi_images: tuple[MultiImageSelection, ...] = ()
+    location: OutputLocation = field(default_factory=OutputLocation)
 
     def __post_init__(self):
         object.__setattr__(self, "files", tuple(self.files))
@@ -128,6 +145,7 @@ class PdfPagesRequest:
     every: int = 1
     selection: str = ""
     separate: bool = False
+    location: OutputLocation = field(default_factory=OutputLocation)
 
 
 @dataclass(frozen=True, slots=True)

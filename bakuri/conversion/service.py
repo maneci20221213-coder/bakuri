@@ -6,6 +6,7 @@ from PIL import Image
 import fitz
 from image_inputs import frames, white_rgb, save_png
 from bakuri.domain.formats import IMAGES, HANCOM, CAD, SUPPORTED, can_convert, can_merge
+from bakuri.domain.models import OutputLocation
 from bakuri.application.control import JobControl
 from merged_names import merged_path
 from .office import OfficeSession
@@ -50,20 +51,17 @@ def convert(
         control.check()
         progress(text)
 
-    def publish(staged, desired):
-        if output_mode != "source":
-            folder = (source_folders or {}).get(desired.parent, desired.parent)
-            folder = (
-                folder / "바꾸리 변환"
-                if output_mode == "subfolder"
-                else Path(output_folder).resolve()
-            )
-            control.check()
-            folder.mkdir(parents=True, exist_ok=True)
-            desired = folder / desired.name
-        return control.publish(staged, desired)
-
-    with OfficeSession() as session, tempfile.TemporaryDirectory() as td:
+    location = OutputLocation(
+        output_mode,
+        str(Path(output_folder).resolve()) if output_mode == "custom" else output_folder,
+    )
+    first_folder = (source_folders or {}).get(files[0].parent, files[0].parent)
+    publish = control.publish
+    with (
+        control.save_to(location, first_folder),
+        OfficeSession() as session,
+        tempfile.TemporaryDirectory() as td,
+    ):
         session.control = control
         td = Path(td)
         pdfs = []
@@ -105,6 +103,8 @@ def convert(
                 temp = td / f"{index}.{fmt}"
                 if fmt == "pptx":
                     session.slides_document([src], temp, td, dpi)
+                elif fmt == "docx" and src.suffix.lower() in IMAGES | {".pdf"}:
+                    session.word_document(src, temp, td, dpi)
                 elif fmt == "hwpx" and src.suffix.lower() in IMAGES | {".pdf"}:
                     session.image_document([src], temp, td, image_mode, message)
                 elif fmt in {"hwpx", "xlsx", "docx"}:

@@ -35,7 +35,7 @@ def can_convert(path, fmt):
         or fmt == "xlsx"
         and ext in SPREADSHEETS
         or fmt == "docx"
-        and ext in {".hwp", ".hwpx"}
+        and ext in (IMAGES | HANCOM | {".odt", ".pdf"})
         or fmt == "pptx"
         and ext in (IMAGES | {".pdf"})
     )

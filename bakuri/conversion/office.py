@@ -178,6 +178,67 @@ class OfficeSession:
             app.AutomationSecurity = 3
         return app
 
+    def word_document(self, source, dest, folder, dpi):
+        """Embed each PDF page or image on its own Word page."""
+        book = self.word().Documents.Add()
+        try:
+            if source.suffix.lower() == ".pdf":
+                with fitz.open(source) as document:
+                    if document.needs_pass:
+                        raise ValueError("암호가 있는 PDF는 지원하지 않습니다.")
+                    if not len(document):
+                        raise ValueError("페이지가 없는 PDF입니다.")
+                    image = folder / "word-page.png"
+                    for index, page in enumerate(document):
+                        self.check()
+                        page.get_pixmap(dpi=dpi, alpha=False).save(str(image))
+                        self.add_word_page(book, image, page.rect.width, page.rect.height, index)
+                        self.advance(0.9 * (index + 1) / len(document), "Word에 PDF 페이지 넣기")
+            else:
+                entries = stage_images([source], folder, checkpoint=self.check)
+                for index, (image, width, height) in enumerate(entries):
+                    paper = fitz.paper_rect("a4-l" if width > height else "a4")
+                    self.add_word_page(book, image, width, height, index, paper=paper)
+                    self.advance(0.9 * (index + 1) / len(entries), "Word에 이미지 넣기")
+            self.check()
+            book.SaveAs2(str(dest), FileFormat=12)  # wdFormatXMLDocument
+            self.check()
+            if not dest.is_file():
+                raise RuntimeError("Word 저장에 실패했습니다.")
+        finally:
+            book.Close(False)
+
+    def add_word_page(self, book, image, width, height, index, *, paper=None):
+        self.check()
+        if index:
+            end = book.Content.End - 1
+            book.Range(end, end).InsertBreak(2)  # wdSectionBreakNextPage
+        setup = book.Sections.Last.PageSetup
+        page_width, page_height = (
+            (paper.width, paper.height) if paper is not None else (width, height)
+        )
+        scale = min(1, 1584 / max(page_width, page_height))  # Word's 22-inch page limit
+        page_width, page_height = max(72, page_width * scale), max(72, page_height * scale)
+        setup.Orientation = int(page_width > page_height)
+        setup.Gutter = 0
+        setup.TopMargin = setup.BottomMargin = setup.LeftMargin = setup.RightMargin = 12
+        setup.PageWidth = page_width
+        setup.PageHeight = page_height
+
+        end = book.Content.End - 1
+        target = book.Range(end, end)
+        paragraph = target.ParagraphFormat
+        paragraph.Alignment = 1  # Center horizontally
+        paragraph.SpaceBefore = paragraph.SpaceAfter = 0
+        paragraph.LineSpacingRule = 0  # Single spacing leaves room for the inline image
+        paragraph.PageBreakBefore = False
+        picture = book.InlineShapes.AddPicture(str(image), False, True, target)
+        fit = min((page_width - 24) / width, (page_height - 36) / height)
+        picture.LockAspectRatio = 0
+        picture.Width = width * fit
+        picture.Height = height * fit
+        self.check()
+
     def export(self, src, dest, fmt):
         self.check()
         import pythoncom, win32com.client
@@ -198,15 +259,20 @@ class OfficeSession:
             finally:
                 book.Close()
             return
-        if src.suffix.lower() in WORDS and fmt.upper() == "PDF":
+        word_pdf = src.suffix.lower() in WORDS and fmt.upper() == "PDF"
+        odt_docx = src.suffix.lower() == ".odt" and fmt.upper() == "DOCX"
+        if word_pdf or odt_docx:
             app = self.word()
             book = app.Documents.Open(str(src), ReadOnly=True, AddToRecentFiles=False)
             try:
                 self.check()
-                book.ExportAsFixedFormat(str(dest), 17)
+                if word_pdf:
+                    book.ExportAsFixedFormat(str(dest), 17)
+                else:
+                    book.SaveAs2(str(dest), FileFormat=12)  # wdFormatXMLDocument
                 self.check()
                 if not dest.exists():
-                    raise RuntimeError("Word PDF 저장에 실패했습니다.")
+                    raise RuntimeError("Word 저장에 실패했습니다.")
             finally:
                 book.Close(False)
             return

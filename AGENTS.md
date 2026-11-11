@@ -5,6 +5,7 @@ Windows file converter. Python 3.12, PySide6, Pillow, PyMuPDF; Office/Hancom COM
 
 ## Start small
 
+- For cross-tool continuation, current branch/release state and validation limits, read `docs/HANDOFF.md`.
 - Read this file, then `python tools/context.py <feature>`; open only the owner and relevant tests.
 - To read one method: `python tools/context.py window --symbol Window.begin_job`.
 - Features: convert, pdf, office, compress, rename, window, popup, jobs, settings, release, update.

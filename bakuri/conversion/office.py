@@ -178,6 +178,38 @@ class OfficeSession:
             app.AutomationSecurity = 3
         return app
 
+    def excel(self):
+        self.check()
+        import pythoncom, win32com.client
+
+        if self.com is None:
+            pythoncom.CoInitialize()
+            self.com = pythoncom
+        if "excel" not in self.apps:
+            app = win32com.client.DispatchEx("Excel.Application")
+            self.apps["excel"] = app
+            app.Visible = False
+            app.DisplayAlerts = False
+            app.AutomationSecurity = 3
+            app.EnableEvents = False
+            app.AskToUpdateLinks = False
+        return self.apps["excel"]
+
+    def open_spreadsheet(self, source):
+        app = self.excel()
+        if source.suffix.lower() in {".csv", ".tsv"}:
+            app.Workbooks.OpenText(str(source), **text_import_options(source))
+            return app.ActiveWorkbook
+        return app.Workbooks.Open(
+            str(source),
+            UpdateLinks=0,
+            ReadOnly=True,
+            IgnoreReadOnlyRecommended=True,
+            Password="",
+            WriteResPassword="",
+            Notify=False,
+        )
+
     def word_document(self, source, dest, folder, dpi):
         """Embed each PDF page or image on its own Word page."""
         book = self.word().Documents.Add()
@@ -277,29 +309,17 @@ class OfficeSession:
                 book.Close(False)
             return
         excel = src.suffix.lower() in SPREADSHEETS
-        key = "excel" if excel else "hwp"
-        app = self.apps.get(key)
+        app = self.excel() if excel else self.apps.get("hwp")
         if app is None:
-            app = win32com.client.DispatchEx("Excel.Application" if excel else "HWPFrame.HwpObject")
-            self.apps[key] = app
-            if excel:
-                app.Visible = False
-                app.DisplayAlerts = False
-                app.AutomationSecurity = 3
-            else:
-                from windows import register_hancom
+            app = win32com.client.DispatchEx("HWPFrame.HwpObject")
+            self.apps["hwp"] = app
+            from windows import register_hancom
 
-                register_hancom(app)
+            register_hancom(app)
         book = None
         try:
             if excel:
-                if src.suffix.lower() in {".csv", ".tsv"}:
-                    app.Workbooks.OpenText(str(src), **text_import_options(src))
-                    book = app.ActiveWorkbook
-                else:
-                    book = app.Workbooks.Open(
-                        str(src), UpdateLinks=0, ReadOnly=True, IgnoreReadOnlyRecommended=True
-                    )
+                book = self.open_spreadsheet(src)
                 self.check()
                 if fmt.upper() == "XLSX":
                     book.SaveAs(str(dest), FileFormat=51)

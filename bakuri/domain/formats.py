@@ -45,6 +45,9 @@ def can_merge(paths, fmt):
     extensions = {Path(p).suffix.lower() for p in paths}
     return (
         fmt.lower() in {"pdf", "pptx"}
+        or fmt.lower() == "xlsx"
+        and len(paths) > 1
+        and extensions <= SPREADSHEETS
         or fmt.lower() == "hwpx"
         and bool(extensions)
         and (extensions <= IMAGES | {".pdf"} or extensions <= HANCOM)

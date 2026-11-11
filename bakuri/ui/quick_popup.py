@@ -190,6 +190,12 @@ class QuickPopup(QWidget):
             labels["pdf"] = ("페이지 나누기" if single else "한글 합치기", "hwpx")
             labels["png"] = ("PDF 변환", "pdf")
             labels["jpeg"] = ("PNG 변환", "png")
+        elif paths and extensions <= SPREADSHEETS:
+            action = "sheet_split" if len(paths) == 1 else "sheet_merge"
+            self.actions = {"pdf": action, "png": "pdf", "jpeg": "png"}
+            labels["pdf"] = ACTIONS[action]
+            labels["png"] = ("PDF 변환", "pdf")
+            labels["jpeg"] = ("PNG 변환", "png")
         labels["more"] = ACTIONS["more"]
         profile = selection_profile(extensions)
         if profile == "cad":

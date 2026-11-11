@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from bakuri.domain.formats import SUPPORTED, can_convert, can_merge, IMAGES, PAGE_SPLIT_INPUTS, CAD
+from bakuri.domain.quick_actions import action_available
 from bakuri.application.control import JobControl
 from bakuri.application.progress import ProgressEstimate
 from settings_ui import SettingsDialog
@@ -34,7 +35,12 @@ from .settings_store import initialize_settings
 from .results import ResultsPresenter
 from bakuri.application.runner import run_job
 from bakuri.application.settings import conversion_options, compression_options, output_location
-from bakuri.domain.models import ConversionRequest, CompressionRequest, PdfPagesRequest
+from bakuri.domain.models import (
+    ConversionRequest,
+    CompressionRequest,
+    PdfPagesRequest,
+    SheetsRequest,
+)
 
 
 class Window(QWidget):
@@ -178,6 +184,10 @@ class Window(QWidget):
             name = self.fmt.itemText(index)
             if name == "페이지 나누기":
                 allowed = len(paths) == 1 and Path(paths[0]).suffix.lower() in PAGE_SPLIT_INPUTS
+            elif name in {"시트 합치기", "시트 나누기"}:
+                allowed = action_available(
+                    "sheet_merge" if name == "시트 합치기" else "sheet_split", paths
+                )
             elif name == "용량 축소":
                 allowed = not paths or all(
                     Path(p).suffix.lower() in IMAGES | {".pdf"} for p in paths
@@ -216,7 +226,7 @@ class Window(QWidget):
         )
         self.pdf_pages.setVisible(single_pdf)
         self.pdf_pages.setEnabled(single_pdf)
-        splitting = format == "페이지 나누기"
+        splitting = format in {"페이지 나누기", "시트 합치기", "시트 나누기"}
         self.individual.setVisible(not splitting)
         self.merge.setVisible(not single_pdf and not splitting)
         self.individual.setText("전체 저장" if single_pdf else "각각 저장")
@@ -226,9 +236,12 @@ class Window(QWidget):
         self.run.setText(
             "대기열에 추가"
             if self.busy
-            else {"용량 축소": "용량 축소 시작", "페이지 나누기": "페이지 나누기  →"}.get(
-                format, "변환 시작  →"
-            )
+            else {
+                "용량 축소": "용량 축소 시작",
+                "페이지 나누기": "페이지 나누기  →",
+                "시트 합치기": "시트 합치기  →",
+                "시트 나누기": "시트 나누기  →",
+            }.get(format, "변환 시작  →")
         )
         if not allowed:
             self.individual.setChecked(True)
@@ -294,6 +307,8 @@ class Window(QWidget):
                 QMessageBox.information(self, "PDF 합치기", "PDF 파일을 두 개 이상 선택해 주세요.")
                 return
             self.start_conversion(self.quick_paths, "pdf", True, self.popup.geometry().center())
+        elif key in {"sheet_split", "sheet_merge"}:
+            self.start_sheets(self.quick_paths, key == "sheet_merge")
         elif key == "compress":
             self.start_compression(self.quick_paths, self.popup.geometry().center())
         else:
@@ -338,8 +353,14 @@ class Window(QWidget):
         if self.fmt.currentText() == "페이지 나누기":
             self.start_pdf_pages(paths)
             return
+        if self.fmt.currentText() in {"시트 합치기", "시트 나누기"}:
+            self.start_sheets(paths, self.fmt.currentText() == "시트 합치기")
+            return
         fmt = self.fmt.currentText().lower()
         merge = self.merge.isChecked() and self.merge.isEnabled()
+        if fmt == "xlsx" and merge:
+            self.start_sheets(paths, True)
+            return
         orientation = (
             self.paper_orientation.currentData()
             if not self.paper_orientation.isHidden()
@@ -376,6 +397,31 @@ class Window(QWidget):
             return
         request = ConversionRequest(files, fmt, merge, options, choices)
         self.begin_job(request, "convert", anchor)
+
+    def start_sheets(self, paths, merge=False):
+        action = "sheet_merge" if merge else "sheet_split"
+        if self.updater.installing or not action_available(action, paths):
+            return
+        from .sheets import SheetsDialog
+
+        self.popup.hide()
+        try:
+            location = output_location(self.settings)
+        except ValueError as error:
+            QMessageBox.information(self, "변환 설정", str(error))
+            return
+        files = self.files.inputs_for(paths)
+        dialog = SheetsDialog(tuple(file.path for file in files), merge, self)
+        if dialog.exec() == QDialog.Accepted:
+            request = SheetsRequest(
+                files,
+                merge,
+                dialog.selected_sheets(),
+                dialog.values_only.isChecked(),
+                dialog.fingerprint,
+                location,
+            )
+            self.begin_job(request, "convert")
 
     def start_pdf_pages(self, paths):
         if self.updater.installing:

@@ -162,7 +162,7 @@ class Popup080Tests(unittest.TestCase):
    for vk,key in [(0x25,'png'),(0x27,'xlsx'),(0x27,'jpeg'),(0x25,'xlsx'),(0x26,'pdf'),(0x28,'xlsx'),(0x28,'more'),(0x26,'xlsx'),(0x26,'pdf'),(0x27,'jpeg')]:
     popup.native_key(vk);self.assertEqual(popup.current,key)
     self.assertEqual([k for k,b in popup.buttons.items() if b.property('selected')],[key])
-   popup.native_key(0x0D);self.assertEqual(selected[-1],'jpeg');self.assertFalse(popup.isVisible())
+   popup.native_key(0x0D);self.assertEqual(selected[-1],'png');self.assertFalse(popup.isVisible())
   popup.present(['a.hwp']);popup.native_key(0x09);popup.native_key(0x09)
   self.assertEqual(popup.current,'hwpx');popup.native_key(0x20);self.assertEqual(selected[-1],'hwpx')
  def test_hwpx_merge_requires_only_images(self):

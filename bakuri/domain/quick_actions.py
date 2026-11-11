@@ -27,6 +27,8 @@ ACTIONS = {
     "pdf_split": ("페이지 나누기", "pdf"),
     "pdf_merge": ("PDF 합치기", "pdf"),
     "hwp_merge": ("한글 합치기", "hwpx"),
+    "sheet_split": ("시트 나누기", "xlsx"),
+    "sheet_merge": ("시트 합치기", "xlsx"),
     "compress": ("용량 축소", "compress"),
     "more": ("확장 기능", "plus"),
 }
@@ -57,6 +59,9 @@ def action_available(action, paths):
         return len(paths) > 1 and extensions == {".pdf"}
     if action == "hwp_merge":
         return len(paths) > 1 and extensions <= HANCOM
+    if action in {"sheet_split", "sheet_merge"}:
+        count_ok = len(paths) == 1 if action == "sheet_split" else len(paths) > 1
+        return count_ok and extensions <= SPREADSHEETS
     if action == "compress":
         return bool(paths) and extensions <= IMAGES | {".pdf"}
     return bool(paths) and all(can_convert(path, action) for path in paths)

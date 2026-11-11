@@ -22,6 +22,7 @@ GROUPS = {
         "test_merge_documents",
         "test_merged_names",
         "test_spreadsheets",
+        "test_excel_sheets",
         "test_word_slides",
     ],
     "compress": ["test_compression", "test_ratios", "test_jpeg_regressions"],

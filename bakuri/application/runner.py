@@ -7,13 +7,14 @@ from bakuri.domain.models import (
     ConversionRequest,
     CompressionRequest,
     PdfPagesRequest,
+    SheetsRequest,
     CompressionRow,
     JobKind,
     JobOutcome,
     JobReport,
 )
 
-Request = ConversionRequest | CompressionRequest | PdfPagesRequest
+Request = ConversionRequest | CompressionRequest | PdfPagesRequest | SheetsRequest
 Operation = Callable[[JobControl], object]
 
 
@@ -33,6 +34,10 @@ def execute(request: Request, control: JobControl):
 
 def _execute(request: Request, control: JobControl):
     """Lazy imports keep engine libraries out of capability checks and UI setup."""
+    if isinstance(request, SheetsRequest):
+        from bakuri.conversion.spreadsheets import process_sheets
+
+        return process_sheets(request, control)
     if isinstance(request, PdfPagesRequest):
         from bakuri.conversion.pdf_split import split_pdf
 

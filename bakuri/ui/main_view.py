@@ -92,7 +92,19 @@ def build_main_view(self):
     self.fmt = QComboBox()
     self.fmt.setItemDelegate(OutputFormatDelegate(self.fmt))
     self.fmt.addItems(
-        ["PDF", "PNG", "JPEG", "HWPX", "DOCX", "PPTX", "XLSX", "용량 축소", "페이지 나누기"]
+        [
+            "PDF",
+            "PNG",
+            "JPEG",
+            "HWPX",
+            "DOCX",
+            "PPTX",
+            "XLSX",
+            "용량 축소",
+            "페이지 나누기",
+            "시트 합치기",
+            "시트 나누기",
+        ]
     )
     self.fmt.setFixedWidth(150)
     self.fmt.setToolTip("XLSX 출력은 매크로를 저장하지 않습니다. 원본 파일은 보존됩니다.")

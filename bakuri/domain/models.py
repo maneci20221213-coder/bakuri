@@ -148,6 +148,30 @@ class PdfPagesRequest:
     location: OutputLocation = field(default_factory=OutputLocation)
 
 
+class SheetSelectionError(ValueError):
+    """An actionable spreadsheet selection or preservation error."""
+
+
+@dataclass(frozen=True, slots=True)
+class SheetsRequest:
+    files: tuple[InputFile, ...]
+    merge: bool = False
+    sheets: tuple[str, ...] = ()
+    values_only: bool = False
+    fingerprint: tuple[int, int] = ()
+    location: OutputLocation = field(default_factory=OutputLocation)
+
+    def __post_init__(self):
+        object.__setattr__(self, "files", tuple(self.files))
+        object.__setattr__(self, "sheets", tuple(self.sheets))
+        object.__setattr__(self, "fingerprint", tuple(self.fingerprint))
+        if self.merge:
+            if len(self.files) < 2:
+                raise SheetSelectionError("합칠 Excel 파일을 두 개 이상 선택해 주세요.")
+        elif len(self.files) != 1 or not self.sheets or len(set(self.sheets)) != len(self.sheets):
+            raise SheetSelectionError("나눠서 저장할 시트를 하나 이상 선택해 주세요.")
+
+
 @dataclass(frozen=True, slots=True)
 class CompressionRow:
     source: str

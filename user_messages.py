@@ -3,6 +3,7 @@ import logging,os
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from bakuri.domain.pdf_selection import PageSelectionError
+from bakuri.domain.models import SheetSelectionError
 from bakuri.conversion.cad import CadError
 
 MESSAGES={
@@ -40,7 +41,7 @@ def log_error(error,context):
 
 def friendly_error(error,context='conversion'):
     text=str(error)
-    if isinstance(error,PageSelectionError) or text in MESSAGES.values():return text
+    if isinstance(error,(PageSelectionError,SheetSelectionError)) or text in MESSAGES.values():return text
     if isinstance(error,CadError):
         log_error(error,context)
         return text

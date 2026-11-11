@@ -60,7 +60,7 @@ class ReleaseUiTests(unittest.TestCase):
    w.files.item(0).setCheckState(0,Qt.Unchecked);w.files.item(1).setCheckState(0,Qt.Checked)
    self.assertTrue(enabled('페이지 나누기'))
    w.files.clear();self.assertFalse(enabled('페이지 나누기'))
-   self.assertTrue(all(w.fmt.model().item(i).isEnabled() for i in range(w.fmt.count()) if w.fmt.itemText(i)!='페이지 나누기'))
+   self.assertTrue(all(w.fmt.model().item(i).isEnabled() for i in range(w.fmt.count()) if w.fmt.itemText(i) not in {'페이지 나누기','시트 합치기','시트 나누기'}))
  def test_cycle_icon_has_transparent_background_and_counters(self):
   from theme import ASSETS
   from PIL import Image,ImageChops

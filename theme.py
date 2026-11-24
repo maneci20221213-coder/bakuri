@@ -40,6 +40,8 @@ def stylesheet():
     QPushButton#separate {{ border-top-left-radius:7px; border-bottom-left-radius:7px; }}
     QPushButton#merge {{ border-top-right-radius:7px; border-bottom-right-radius:7px; }}
     QPushButton#separate:checked, QPushButton#merge:checked {{ background:{ACCENT}; color:white; border-color:{ACCENT}; }}
+    QPushButton#separate:enabled:hover, QPushButton#merge:enabled:hover {{ background:#EAF3FF; border-color:#AECDF6; }}
+    QPushButton#separate:checked:enabled:hover, QPushButton#merge:checked:enabled:hover {{ background:#2475DF; border-color:#2475DF; }}
     QPushButton#merge:disabled {{ color:#A4AFBD; background:#F5F7FB; }}
     QComboBox {{ background:white; border:1px solid #DCE3EE; border-radius:7px; padding:9px 14px; min-height:20px; min-width:110px; }}
     QComboBox:focus {{ border:1px solid {ACCENT}; }}

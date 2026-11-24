@@ -6,6 +6,7 @@ from PIL import Image
 import fitz
 from image_inputs import frames, white_rgb, save_png
 from bakuri.domain.formats import IMAGES, HANCOM, CAD, SUPPORTED, can_convert, can_merge
+from bakuri.domain.models import InputFile, OutputLocation, SheetsRequest
 from bakuri.application.control import JobControl
 from merged_names import merged_path
 from .office import OfficeSession
@@ -35,10 +36,12 @@ def convert(
         raise ValueError("파일을 추가해 주세요.")
     if fmt not in {"png", "jpeg", "pdf", "hwpx", "xlsx", "docx", "pptx"}:
         raise ValueError("지원하지 않는 출력 형식")
-    if merge and fmt not in {"pdf", "hwpx", "pptx"}:
+    if merge and fmt not in {"pdf", "hwpx", "pptx", "xlsx"}:
         raise ValueError("합치기는 PDF·PPTX 또는 이미지의 HWPX 변환만 가능합니다.")
     if merge and not can_merge(files, fmt):
-        raise ValueError("한글 문서와 이미지·PDF는 따로 선택해 합쳐 주세요.")
+        raise ValueError(
+            "선택한 파일은 이 방식으로 합칠 수 없습니다. 파일 형식과 개수를 확인해 주세요."
+        )
     for path in files:
         control.check()
         if not path.is_file() or path.suffix.lower() not in SUPPORTED:
@@ -50,20 +53,24 @@ def convert(
         control.check()
         progress(text)
 
-    def publish(staged, desired):
-        if output_mode != "source":
-            folder = (source_folders or {}).get(desired.parent, desired.parent)
-            folder = (
-                folder / "바꾸리 변환"
-                if output_mode == "subfolder"
-                else Path(output_folder).resolve()
-            )
-            control.check()
-            folder.mkdir(parents=True, exist_ok=True)
-            desired = folder / desired.name
-        return control.publish(staged, desired)
+    location = OutputLocation(
+        output_mode,
+        str(Path(output_folder).resolve()) if output_mode == "custom" else output_folder,
+    )
+    first_folder = (source_folders or {}).get(files[0].parent, files[0].parent)
+    if merge and fmt == "xlsx":
+        from .spreadsheets import process_sheets
 
-    with OfficeSession() as session, tempfile.TemporaryDirectory() as td:
+        with control.save_to(location, first_folder):
+            return process_sheets(
+                SheetsRequest(tuple(InputFile(p) for p in files), merge=True), control
+            )
+    publish = control.publish
+    with (
+        control.save_to(location, first_folder),
+        OfficeSession() as session,
+        tempfile.TemporaryDirectory() as td,
+    ):
         session.control = control
         td = Path(td)
         pdfs = []
@@ -105,6 +112,8 @@ def convert(
                 temp = td / f"{index}.{fmt}"
                 if fmt == "pptx":
                     session.slides_document([src], temp, td, dpi)
+                elif fmt == "docx" and src.suffix.lower() in IMAGES | {".pdf"}:
+                    session.word_document(src, temp, td, dpi)
                 elif fmt == "hwpx" and src.suffix.lower() in IMAGES | {".pdf"}:
                     session.image_document([src], temp, td, image_mode, message)
                 elif fmt in {"hwpx", "xlsx", "docx"}:

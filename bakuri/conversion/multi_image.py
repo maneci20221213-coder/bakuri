@@ -244,7 +244,7 @@ def process_selected_images(request, selections, control):
                 merge,
                 control=publication,
                 source_folders=folders,
-                **request.options.as_kwargs(),
+                **request.options.as_kwargs(include_location=False),
             )
         else:
             try:

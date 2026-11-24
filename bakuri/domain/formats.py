@@ -35,7 +35,7 @@ def can_convert(path, fmt):
         or fmt == "xlsx"
         and ext in SPREADSHEETS
         or fmt == "docx"
-        and ext in {".hwp", ".hwpx"}
+        and ext in (IMAGES | HANCOM | {".odt", ".pdf"})
         or fmt == "pptx"
         and ext in (IMAGES | {".pdf"})
     )
@@ -45,6 +45,9 @@ def can_merge(paths, fmt):
     extensions = {Path(p).suffix.lower() for p in paths}
     return (
         fmt.lower() in {"pdf", "pptx"}
+        or fmt.lower() == "xlsx"
+        and len(paths) > 1
+        and extensions <= SPREADSHEETS
         or fmt.lower() == "hwpx"
         and bool(extensions)
         and (extensions <= IMAGES | {".pdf"} or extensions <= HANCOM)

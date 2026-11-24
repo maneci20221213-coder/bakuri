@@ -51,16 +51,16 @@ class ReleaseUiTests(unittest.TestCase):
    d=Path(d);png=d/'a.png';word=d/'a.docx';Image.new('RGB',(10,10)).save(png);word.write_bytes(b'docx')
    w=self.w;w.files.add_paths([str(png)])
    def enabled(name):return w.fmt.model().item(w.fmt.findText(name)).isEnabled()
-   self.assertFalse(enabled('DOCX'));self.assertFalse(enabled('XLSX'));self.assertTrue(enabled('HWPX'));self.assertTrue(enabled('PPTX'))
+   self.assertTrue(enabled('DOCX'));self.assertFalse(enabled('XLSX'));self.assertTrue(enabled('HWPX'));self.assertTrue(enabled('PPTX'))
    w.fmt.setCurrentText('PPTX');w.files.add_paths([str(word)])
-   self.assertFalse(enabled('PPTX'));self.assertFalse(enabled('용량 축소'));self.assertEqual(w.fmt.currentText(),'PDF')
+   self.assertFalse(enabled('PPTX'));self.assertFalse(enabled('DOCX'));self.assertFalse(enabled('용량 축소'));self.assertEqual(w.fmt.currentText(),'PDF')
    self.assertEqual(w.fmt.model().item(w.fmt.findText('PPTX')).foreground().color().name(),'#a4afbd')
    w.files.item(1).setCheckState(0,Qt.Unchecked);self.assertTrue(enabled('PPTX'))
    self.assertFalse(enabled('페이지 나누기'))
    w.files.item(0).setCheckState(0,Qt.Unchecked);w.files.item(1).setCheckState(0,Qt.Checked)
    self.assertTrue(enabled('페이지 나누기'))
    w.files.clear();self.assertFalse(enabled('페이지 나누기'))
-   self.assertTrue(all(w.fmt.model().item(i).isEnabled() for i in range(w.fmt.count()) if w.fmt.itemText(i)!='페이지 나누기'))
+   self.assertTrue(all(w.fmt.model().item(i).isEnabled() for i in range(w.fmt.count()) if w.fmt.itemText(i) not in {'페이지 나누기','시트 합치기','시트 나누기'}))
  def test_cycle_icon_has_transparent_background_and_counters(self):
   from theme import ASSETS
   from PIL import Image,ImageChops

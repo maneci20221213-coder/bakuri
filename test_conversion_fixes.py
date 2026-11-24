@@ -7,6 +7,73 @@ from engine import convert
 from image_inputs import page_sizes
 from pdf_pages import HP,q,paginate
 from test_pdf_pages import realistic_package
+from bakuri.application.control import JobControl
+from bakuri.application.runner import execute
+from bakuri.domain.models import (
+    CompressionOptions,
+    CompressionRequest,
+    ConversionRequest,
+    InputFile,
+    PdfPagesRequest,
+)
+
+
+class SmartOutputTests(unittest.TestCase):
+    def test_one_merged_result_stays_with_first_source_and_many_get_fresh_folder(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            other = root / "other"
+            other.mkdir()
+            first, second = root / "one.png", other / "two.png"
+            for path in (first, second):
+                Image.new("RGB", (30, 50)).save(path)
+            inputs = (InputFile(first), InputFile(second))
+            (merged,) = execute(ConversionRequest(inputs, "pdf", True), JobControl())
+            self.assertEqual(Path(merged).parent, root)
+            self.assertFalse((root / "바꾸리 변환").exists())
+
+            for folder in ("바꾸리 변환", "바꾸리 변환_1"):
+                outputs = execute(ConversionRequest(inputs, "pdf"), JobControl())
+                self.assertEqual([Path(path).parent for path in outputs], [root / folder] * 2)
+                self.assertEqual([Path(path).name for path in outputs], ["one.pdf", "two.pdf"])
+
+    def test_one_pdf_can_generate_many_outputs_or_a_single_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            source = root / "input.pdf"
+            with fitz.open() as pdf:
+                for _ in range(3):
+                    pdf.new_page(width=30, height=50)
+                pdf.save(source)
+            file = InputFile(source)
+            images = execute(ConversionRequest((file,), "png"), JobControl())
+            self.assertEqual([Path(path).parent for path in images], [root / "바꾸리 변환"] * 3)
+            pages = execute(PdfPagesRequest(file, every=2), JobControl())
+            self.assertEqual([Path(path).parent for path in pages], [root / "바꾸리 변환_1"] * 2)
+            (extracted,) = execute(
+                PdfPagesRequest(file, mode="extract", selection="3, 1"), JobControl()
+            )
+            self.assertEqual(Path(extracted).parent, root)
+
+    def test_compression_groups_only_files_that_actually_shrink(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            other = root / "other"
+            other.mkdir()
+            small, large = root / "small.jpg", other / "large.png"
+            Image.new("RGB", (20, 20)).save(small)
+            Image.new("RGB", (800, 600)).save(large, compress_level=0)
+            control = JobControl()
+            (result,) = execute(
+                CompressionRequest(
+                    (InputFile(small), InputFile(large)), CompressionOptions("size")
+                ),
+                control,
+            )
+            self.assertEqual(Path(result).parent, other)
+            self.assertEqual([row["output"] for row in control.rows], ["", result])
+            self.assertFalse((root / "바꾸리 변환").exists())
+
 
 class PngSizeRegressionTests(unittest.TestCase):
  def test_pdf_is_deflated_without_pixel_or_alpha_loss(self):

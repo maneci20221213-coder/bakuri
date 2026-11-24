@@ -72,7 +72,10 @@ def build_main_view(self):
     layout.addWidget(toolbar)
     self.mode_tabs = QTabBar()
     self.mode_tabs.setStyleSheet(
-        "QTabBar::tab {background:#FFFFFF;color:#60718A;padding:12px 24px;border-bottom:2px solid #E2E8F0;} QTabBar::tab:selected {color:#2E83F2;border-bottom:2px solid #2E83F2;font-weight:600;}"
+        "QTabBar::tab {background:#FFFFFF;color:#60718A;padding:12px 24px;"
+        "border-bottom:2px solid #E2E8F0;}"
+        "QTabBar::tab:selected {color:#2E83F2;border-bottom:2px solid #2E83F2;font-weight:600;}"
+        "QTabBar::tab:hover {background:#EAF3FF;color:#216ABC;}"
     )
     self.mode_tabs.addTab("파일 변환")
     self.mode_tabs.addTab("파일명 변경")
@@ -89,7 +92,19 @@ def build_main_view(self):
     self.fmt = QComboBox()
     self.fmt.setItemDelegate(OutputFormatDelegate(self.fmt))
     self.fmt.addItems(
-        ["PDF", "PNG", "JPEG", "HWPX", "DOCX", "PPTX", "XLSX", "용량 축소", "페이지 나누기"]
+        [
+            "PDF",
+            "PNG",
+            "JPEG",
+            "HWPX",
+            "DOCX",
+            "PPTX",
+            "XLSX",
+            "용량 축소",
+            "페이지 나누기",
+            "시트 합치기",
+            "시트 나누기",
+        ]
     )
     self.fmt.setFixedWidth(150)
     self.fmt.setToolTip("XLSX 출력은 매크로를 저장하지 않습니다. 원본 파일은 보존됩니다.")

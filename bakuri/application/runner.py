@@ -1,27 +1,45 @@
 """One outcome boundary for conversion, compression and cooperative cancellation."""
 
 from typing import Callable
+from pathlib import Path
 from .control import JobControl, Cancelled
 from bakuri.domain.models import (
     ConversionRequest,
     CompressionRequest,
     PdfPagesRequest,
+    SheetsRequest,
     CompressionRow,
     JobKind,
     JobOutcome,
     JobReport,
 )
 
-Request = ConversionRequest | CompressionRequest | PdfPagesRequest
+Request = ConversionRequest | CompressionRequest | PdfPagesRequest | SheetsRequest
 Operation = Callable[[JobControl], object]
 
 
 def execute(request: Request, control: JobControl):
+    first = (
+        request.file if isinstance(request, PdfPagesRequest) else next(iter(request.files), None)
+    )
+    if first is None:
+        return _execute(request, control)
+    location = (
+        request.options.location if isinstance(request, ConversionRequest) else request.location
+    )
+    with control.save_to(location, Path(first.path).resolve().parent):
+        _execute(request, control)
+    return list(control.outputs)
+
+
+def _execute(request: Request, control: JobControl):
     """Lazy imports keep engine libraries out of capability checks and UI setup."""
+    if isinstance(request, SheetsRequest):
+        from bakuri.conversion.spreadsheets import process_sheets
+
+        return process_sheets(request, control)
     if isinstance(request, PdfPagesRequest):
         from bakuri.conversion.pdf_split import split_pdf
-
-        from pathlib import Path
 
         source = Path(request.file.path)
         args = request.mode, request.every, request.selection, request.separate, control
@@ -45,7 +63,7 @@ def execute(request: Request, control: JobControl):
             request.output.value,
             request.merge,
             control=control,
-            **request.options.as_kwargs(),
+            **request.options.as_kwargs(include_location=False),
         )
     if isinstance(request, CompressionRequest):
         from bakuri.compression.service import compress

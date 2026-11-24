@@ -103,7 +103,13 @@ class SettingsDialog(QDialog):
         categories.setAccessibleName("설정 분류")
         categories.setFixedWidth(124)
         categories.setSpacing(5)
-        categories.setStyleSheet("QListWidget::item { padding: 7px 9px; }")
+        categories.setStyleSheet(
+            "QListWidget { outline: 0; }"
+            "QListWidget::item { padding: 7px 9px; border-left: 3px solid transparent;"
+            " background: transparent; color: #334155; }"
+            "QListWidget::item:selected { border-left-color: #2E83F2;"
+            " background: #EAF3FF; color: #1E4C83; }"
+        )
         pages = QStackedWidget()
         content = QHBoxLayout()
         content.addWidget(categories)
@@ -203,13 +209,14 @@ class SettingsDialog(QDialog):
         form = page("변환")
         self.output_mode = QComboBox()
         for label, value in (
+            ("똑똑하게", "smart"),
             ("같은 위치", "source"),
             ("새 폴더", "subfolder"),
             ("폴더 지정", "custom"),
         ):
             self.output_mode.addItem(label, value)
         self.output_mode.setCurrentIndex(
-            max(0, self.output_mode.findData(settings.value("output_mode", "source")))
+            max(0, self.output_mode.findData(settings.value("output_mode", "smart")))
         )
         form.addRow("변환 파일 생성 위치", self.output_mode)
         self.output_folder = QLineEdit(settings.value("output_folder", ""))
@@ -222,7 +229,9 @@ class SettingsDialog(QDialog):
         form.addRow("지정 폴더", location)
         self.output_mode.currentIndexChanged.connect(self.update_output_folder)
         self.update_output_folder()
-        note = QLabel("새 폴더를 선택하면 원본 폴더 안의 ‘바꾸리 변환’에 저장합니다.")
+        note = QLabel(
+            "똑똑하게는 결과가 하나면 원본 폴더에, 여러 개면 첫 원본 폴더에 새 폴더를 만들어 저장합니다."
+        )
         note.setWordWrap(True)
         form.addRow(note)
         self.dpi = QComboBox()

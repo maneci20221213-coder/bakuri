@@ -3,7 +3,7 @@
 import json
 from dataclasses import replace
 from pathlib import Path
-from PySide6.QtCore import Qt, QStandardPaths
+from PySide6.QtCore import Qt, QStandardPaths, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QWidget,
@@ -30,6 +30,42 @@ from bakuri.renaming.planner import plan_rename
 from bakuri.renaming.transaction import apply, undo
 from bakuri.domain.rename_rules import fill_down, _text_lines
 from bakuri.domain.models import RenameOptions
+
+
+class PreviewLineEdit(QLineEdit):
+    """Include IME composition in previews without committing or interrupting typing."""
+
+    previewChanged = Signal(str)
+
+    def __init__(self):
+        super().__init__()
+        self._preedit = ""
+        self._handling_ime = False
+        self.textChanged.connect(self._text_changed)
+
+    def _text_changed(self, _value):
+        if not self._handling_ime:
+            self._preedit = ""
+            self.previewChanged.emit(self.preview_text())
+
+    def inputMethodEvent(self, event):
+        self._handling_ime = True
+        try:
+            super().inputMethodEvent(event)
+            self._preedit = event.preeditString()
+        finally:
+            self._handling_ime = False
+        self.previewChanged.emit(self.preview_text())
+
+    def preview_text(self):
+        # Qt cursor offsets count UTF-16 units, including two units for emoji.
+        text = self.text().encode("utf-16-le")
+        position = self.cursorPosition() * 2
+        return (
+            text[:position].decode("utf-16-le")
+            + self._preedit
+            + text[position:].decode("utf-16-le")
+        )
 
 
 class TextDelegate(FileNameDelegate):
@@ -104,18 +140,18 @@ class RenamePanel(QWidget):
         form.setVerticalSpacing(6)
         form.setHorizontalSpacing(14)
         layout.addLayout(form)
-        self.find = QLineEdit()
-        self.replace = QLineEdit()
+        self.find = PreviewLineEdit()
+        self.replace = PreviewLineEdit()
         line = QHBoxLayout()
         line.setSpacing(8)
         line.addWidget(self.find)
         line.addWidget(QLabel("→"))
         line.addWidget(self.replace)
         form.addRow("찾아 바꾸기", line)
-        self.string = QLineEdit()
+        self.string = PreviewLineEdit()
         self.string_position = QComboBox()
         positions(self.string_position)
-        self.string_marker = QLineEdit()
+        self.string_marker = PreviewLineEdit()
         self.string_marker.setPlaceholderText("처음 일치하는 기준 문자")
         self.string_marker.hide()
         self.text_enabled = QCheckBox("파일별 문구")
@@ -129,7 +165,7 @@ class RenamePanel(QWidget):
         self.string_label.setMinimumHeight(32)
         self.string_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         form.addRow(self.string_label, line)
-        self.base = QLineEdit()
+        self.base = PreviewLineEdit()
         form.addRow("파일명 새로 쓰기", self.base)
         self.number_enabled = QCheckBox("연번 추가")
         self.start = QSpinBox()
@@ -146,7 +182,7 @@ class RenamePanel(QWidget):
         positions(self.number_position)
         self.number_position.setCurrentIndex(1)
         self.number_enabled.setMinimumHeight(32)
-        self.number_marker = QLineEdit()
+        self.number_marker = PreviewLineEdit()
         self.number_marker.setPlaceholderText("처음 일치하는 기준 문자")
         self.number_marker.hide()
         self.separator = QComboBox()
@@ -199,9 +235,9 @@ class RenamePanel(QWidget):
         line.addWidget(self.run)
         line.addWidget(self.restore)
         layout.addLayout(line)
-        self.base.textChanged.connect(self.base_changed)
+        self.base.previewChanged.connect(self.base_changed)
         for field in [self.find, self.replace, self.string, self.string_marker, self.number_marker]:
-            field.textChanged.connect(self.settings_changed)
+            field.previewChanged.connect(self.settings_changed)
         for combo in [self.number_position, self.string_position, self.separator]:
             combo.currentIndexChanged.connect(self.settings_changed)
         for check in [self.number_enabled, self.text_enabled]:
@@ -329,11 +365,11 @@ class RenamePanel(QWidget):
         self.rows = plan_rename(
             self.files.checked_paths(),
             RenameOptions(
-                find=self.find.text(),
-                replace=self.replace.text(),
-                string=self.string.text() if not active else "",
+                find=self.find.preview_text(),
+                replace=self.replace.preview_text(),
+                string=self.string.preview_text() if not active else "",
                 string_position=self.string_position.currentData(),
-                string_marker=self.string_marker.text(),
+                string_marker=self.string_marker.preview_text(),
                 manual_names={
                     **self.applied_names,
                     **{
@@ -344,16 +380,16 @@ class RenamePanel(QWidget):
                         if self.files.item(i).data(4, Qt.UserRole) is not None
                     },
                 },
-                base=self.base.text(),
+                base=self.base.preview_text(),
                 start=self.start.value(),
                 digits=self.digits.value(),
                 number_enabled=self.number_enabled.isChecked(),
                 number_position=self.number_position.currentData(),
-                number_marker=self.number_marker.text(),
+                number_marker=self.number_marker.preview_text(),
                 separator=self.separator.currentData(),
                 text_by_source=values if active else {},
                 text_position=self.string_position.currentData(),
-                text_marker=self.string_marker.text(),
+                text_marker=self.string_marker.preview_text(),
             ),
         )
         by_source = {r["source"]: r for r in self.rows}

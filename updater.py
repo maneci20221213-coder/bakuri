@@ -137,6 +137,8 @@ class UpdateController(QObject):
             return
         self.last_check = now
         self.checking = True
+        if reason == "manual":
+            self.window.status.setText("새 버전을 확인하고 있습니다…")
 
         def work():
             try:

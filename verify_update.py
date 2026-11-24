@@ -13,6 +13,14 @@ def verify(root,releases):
   download_to('https://github.com/maneci20221213-coder/bakuri/releases/latest/download/releases.stable.json',public_feed,2*1024*1024)
   assert json.loads(public_feed.read_text(encoding='utf-8-sig'))['Assets']
   print('Windows Internet HTTPS download verification passed.')
+  # Reproduce the reported WinINet reset and require the independent HTTPS
+  # implementation to retrieve the real feed with normal certificate checks.
+  from unittest.mock import patch
+  reset=OSError('simulated WinINet connection reset');reset.winerror=12031
+  with patch('update_transport._windows_download',side_effect=reset):
+   download_to('https://github.com/maneci20221213-coder/bakuri/releases/latest/download/releases.stable.json',public_feed,2*1024*1024)
+  assert json.loads(public_feed.read_text(encoding='utf-8-sig'))['Assets']
+  print('Windows 12031 recovery through independent HTTPS verification passed.')
   manifest=root/'current'/'sq.version'
   tree=ET.parse(manifest)
   node=next(x for x in tree.iter() if x.tag.rsplit('}',1)[-1]=='version')
@@ -20,7 +28,7 @@ def verify(root,releases):
   legacy_source=subprocess.check_output(['git','show','dbc2eaada3b62c813095645289e934a3f79bde47:update_source.py'],text=True,encoding='utf-8')
   namespace={'__name__':'bakuri_legacy_update_verification'}
   exec(compile(legacy_source,'released-0.15.0/update_source.py','exec'),namespace)
-  for baseline in ('0.15.0','1.0.0-beta.1','1.0.2'):
+  for baseline in ('0.15.0','1.0.0-beta.1','1.0.2','1.0.4','1.0.6'):
    node.text=baseline;older=folder/'older.version';tree.write(older,encoding='utf-8',xml_declaration=True)
    locator=velopack.VelopackLocatorConfig(root,root/'Update.exe',root/'packages',older,root/'current',False)
    def factory(source):return velopack.UpdateManager(source,locator=locator)

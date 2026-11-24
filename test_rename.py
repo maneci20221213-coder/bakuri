@@ -83,3 +83,64 @@ class RenameUiTests(unittest.TestCase):
     w.rename_panel.undo();self.assertTrue(a.exists());self.assertEqual(w.files.item(0).data(0,Qt.UserRole),str(a))
     w.mode_tabs.setCurrentIndex(0);self.assertTrue(w.files.isColumnHidden(4));self.assertFalse(w.files.isColumnHidden(1))
    finally:w.tray.hide();w.hide();w.deleteLater()
+
+
+class RenameImeTests(unittest.TestCase):
+    def send_ime(self, field, preedit="", commit=""):
+        from PySide6.QtGui import QInputMethodEvent
+        event = QInputMethodEvent(preedit, [])
+        if commit:
+            event.setCommitString(commit)
+        QApplication.sendEvent(field, event)
+
+    def test_composition_preview_handles_commit_cancel_and_middle_insertion(self):
+        from rename_ui import PreviewLineEdit
+        field = PreviewLineEdit()
+        field.setText("😀앞뒤")
+        field.setCursorPosition(3)
+        self.send_ime(field, "문")
+        self.assertEqual(field.text(), "😀앞뒤")
+        self.assertEqual(field.preview_text(), "😀앞문뒤")
+        self.send_ime(field, "문서")
+        self.assertEqual(field.preview_text(), "😀앞문서뒤")
+        self.send_ime(field)
+        self.assertEqual(field.preview_text(), "😀앞뒤")
+        self.send_ime(field, "문")
+        self.send_ime(field, commit="문")
+        self.assertEqual(field.preview_text(), "😀앞문뒤")
+        field.setText("붙여넣기")
+        self.assertEqual(field.preview_text(), "붙여넣기")
+
+    def test_rename_preview_includes_last_korean_syllable_without_space(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            source = root / "자료.txt"
+            source.write_text("원본", encoding="utf-8")
+            window = Window()
+            try:
+                panel = window.rename_panel
+                panel.journal = root / "history.json"
+                window.files.add_paths([str(source)])
+                window.mode_tabs.setCurrentIndex(1)
+                panel.string.setText("논")
+                self.send_ime(panel.string, "문")
+                self.assertEqual(window.files.item(0).text(4), "논문자료.txt")
+                self.send_ime(panel.string, commit="문")
+                self.assertEqual(window.files.item(0).text(4), "논문자료.txt")
+                panel.string.clear()
+                panel.base.setText("논")
+                self.send_ime(panel.base, "문")
+                self.assertEqual(window.files.item(0).text(4), "논문_1.txt")
+                self.send_ime(panel.base, "무")
+                self.assertEqual(window.files.item(0).text(4), "논무_1.txt")
+                self.send_ime(panel.base)
+                self.assertEqual(window.files.item(0).text(4), "논_1.txt")
+                self.send_ime(panel.base, "문")
+                self.send_ime(panel.base, commit="문")
+                with patch.object(window, "show_completion"):
+                    panel.execute()
+                self.assertEqual((root / "논문_1.txt").read_text(encoding="utf-8"), "원본")
+            finally:
+                window.tray.hide()
+                window.hide()
+                window.deleteLater()

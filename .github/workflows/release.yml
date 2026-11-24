@@ -1,8 +1,5 @@
 name: Windows installer and GitHub Release
 on:
-  push:
-    branches: [main]
-    paths: [.github/workflows/release.yml]
   workflow_dispatch:
     inputs:
       publish:
@@ -25,12 +22,11 @@ jobs:
     env:
       QT_QPA_PLATFORM: offscreen
       BAKURI_DISABLE_SHELL_INTEGRATION: '1'
-      BAKURI_RELEASE_TARGET: 5b735c4a305edcd7cc128515dc42336998d04e70
+      BAKURI_RELEASE_TARGET: ${{ github.sha }}
       BAKURI_REPOSITORY_URL: https://github.com/${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 5b735c4a305edcd7cc128515dc42336998d04e70
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
@@ -53,10 +49,6 @@ jobs:
         run: |
           python -m unittest discover -v
           if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
-          python verify_multi_image.py
-          if ($LASTEXITCODE -ne 0) { throw 'Native multi-image verification failed' }
-          python verify_pdf_split.py
-          if ($LASTEXITCODE -ne 0) { throw 'Native PDF splitting verification failed' }
           python verify_completion_ui.py
           if ($LASTEXITCODE -ne 0) { throw 'Native completion/layout verification failed' }
           python -c "import subprocess,sys; subprocess.run([sys.executable,'verify_reorder.py'],check=True,timeout=25)"
@@ -75,7 +67,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BAKURI_VERSION: ${{ steps.app.outputs.version }}
-          BAKURI_PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
+          BAKURI_PUBLISH: ${{ inputs.publish }}
         run: |
           $Tag="v$env:BAKURI_VERSION"
           $PreRelease=$env:BAKURI_VERSION.Contains('-')

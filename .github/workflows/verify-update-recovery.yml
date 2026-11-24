@@ -1,0 +1,55 @@
+name: Verify Bakuri 1.0.7 Windows installer
+on:
+  push:
+    branches: [fix/update-connection-reset-20261124]
+    paths: [.github/workflows/verify-update-recovery.yml]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    env:
+      QT_QPA_PLATFORM: offscreen
+      BAKURI_DISABLE_SHELL_INTEGRATION: '1'
+      BAKURI_REPOSITORY_URL: https://github.com/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 0131f0f30a6e033a5402baaa5460b9f53819a15c
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Read app version
+        id: app
+        shell: pwsh
+        run: |
+          $Version=python -c "from version import VERSION; print(VERSION)"
+          if ($LASTEXITCODE -ne 0 -or $Version -notmatch '^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$') { throw 'Invalid version' }
+          "version=$Version" >> $env:GITHUB_OUTPUT
+      - name: Install test dependencies
+        shell: pwsh
+        run: |
+          python -m pip install -r requirements-dev.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
+      - name: Regression tests
+        shell: pwsh
+        run: |
+          python -m unittest discover -v
+          if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
+          python verify_completion_ui.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native completion/layout verification failed' }
+          python -c "import subprocess,sys; subprocess.run([sys.executable,'verify_reorder.py'],check=True,timeout=25)"
+          if ($LASTEXITCODE -ne 0) { throw 'Native file drag verification failed' }
+      - name: Build installer and update feed
+        shell: pwsh
+        run: ./build_release.ps1 -RepositoryUrl $env:BAKURI_REPOSITORY_URL
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Bakuri-v${{ steps.app.outputs.version }}-Windows
+          path: Releases/*
+          if-no-files-found: error
+          retention-days: 14
